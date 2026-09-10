@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Usage Statistics</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #1a2233; --muted: #6b7280;
+    --border: #e5e7eb; --accent: #4f6ef7; --ok: #16a34a; --bad: #ef4444;
+    --shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  [data-theme="dark"] {
+    --bg: #0f1420; --card: #171e2e; --text: #e5e9f2; --muted: #8b93a7;
+    --border: #26304a; --accent: #6d87ff; --ok: #34d399; --bad: #f87171;
+    --shadow: 0 1px 3px rgba(0,0,0,0.4);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 13px;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 14px; }
+  .topbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .topbar h1 { font-size: 16px; margin: 0; flex: 1; min-width: 120px; }
+  .sel, .inp {
+    background: var(--card); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 5px 8px; font-size: 12px;
+  }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+  .tab {
+    padding: 7px 12px; cursor: pointer; border-radius: 6px 6px 0 0; color: var(--muted);
+    user-select: none; font-weight: 500;
+  }
+  .tab.on { color: var(--accent); border-bottom: 2px solid var(--accent); }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 12px; }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 12px; box-shadow: var(--shadow);
+  }
+  .card .lbl { color: var(--muted); font-size: 11px; margin-bottom: 4px; }
+  .card .val { font-size: 18px; font-weight: 700; word-break: break-all; }
+  .card .sub { color: var(--muted); font-size: 11px; margin-top: 2px; }
+  .panel { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px; box-shadow: var(--shadow); margin-bottom: 12px; }
+  .panel h3 { margin: 0 0 10px; font-size: 13px; }
+  .chart { width: 100%; height: 220px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 600; cursor: default; }
+  td.num, th.num { text-align: right; }
+  tr.clickable:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); cursor: pointer; }
+  .pill { display: inline-block; padding: 1px 7px; border-radius: 99px; font-size: 11px; font-weight: 600; }
+  .pill.ok { background: color-mix(in srgb, var(--ok) 15%, transparent); color: var(--ok); }
+  .pill.bad { background: color-mix(in srgb, var(--bad) 15%, transparent); color: var(--bad); }
+  .filters { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  .pager { display: flex; gap: 8px; align-items: center; justify-content: flex-end; margin-top: 8px; color: var(--muted); }
+  .detail { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: none; align-items: center; justify-content: center; z-index: 50; }
+  .detail .box { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; max-width: 640px; width: 92%; max-height: 80vh; overflow: auto; }
+  .detail pre { background: var(--bg); padding: 8px; border-radius: 6px; overflow: auto; font-size: 11px; white-space: pre-wrap; word-break: break-all; }
+  .err { color: var(--bad); font-weight: 600; }
+  .muted { color: var(--muted); }
+  .bar { height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--accent) 18%, transparent); position: relative; }
+  .bar > span { position: absolute; inset: 0; border-radius: 4px; background: var(--accent); display: block; }
+  @media (max-width: 640px) {
+    .wrap { padding: 8px; }
+    .card .val { font-size: 15px; }
+    th, td { padding: 5px 6px; font-size: 11px; }
+    .chart { height: 160px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <h1>📊 Usage Statistics</h1>
+    <select id="rangeSel" class="sel">
+      <option value="today">Hôm nay</option>
+      <option value="7d" selected>7 ngày</option>
+      <option value="30d">30 ngày</option>
+      <option value="all">Toàn bộ</option>
+    </select>
+    <input id="keyInput" class="inp" type="password" placeholder="Management key (nếu chưa đăng nhập)" style="display:none">
+  </div>
+  <div class="tabs">
+    <div class="tab on" data-tab="overview">Overview</div>
+    <div class="tab" data-tab="models">Models</div>
+    <div class="tab" data-tab="requests">Requests</div>
+    <div class="tab" data-tab="breakdown">Keys &amp; Providers</div>
+  </div>
+  <div id="tab-overview">
+    <div class="cards" id="cards"></div>
+    <div class="panel"><h3>Requests theo giờ</h3><div id="hourChart" class="chart"></div></div>
+    <div class="panel"><h3>Lỗi theo status code</h3><div id="statusPanel"></div></div>
+  </div>
+  <div id="tab-models" style="display:none">
+    <div class="panel">
+      <h3>Theo model thật (resolved)</h3>
+      <div style="overflow-x:auto"><table id="modelTable"></table></div>
+    </div>
+    <div class="panel">
+      <h3>Theo alias client gọi</h3>
+      <div style="overflow-x:auto"><table id="aliasTable"></table></div>
+    </div>
+  </div>
+  <div id="tab-requests" style="display:none">
+    <div class="panel">
+      <div class="filters">
+        <select id="fModel" class="sel"><option value="">Model: tất cả</option></select>
+        <select id="fKey" class="sel"><option value="">Key: tất cả</option></select>
+        <select id="fResult" class="sel"><option value="">Kết quả: tất cả</option><option value="success">Thành công</option><option value="failed">Thất bại</option></select>
+      </div>
+      <div style="overflow-x:auto"><table id="reqTable"></table></div>
+      <div class="pager">
+        <button id="prevBtn" class="sel">← Trước</button>
+        <span id="pageInfo">–</span>
+        <button id="nextBtn" class="sel">Sau →</button>
+      </div>
+    </div>
+  </div>
+  <div id="tab-breakdown" style="display:none">
+    <div class="panel"><h3>Theo API key (client)</h3><div style="overflow-x:auto"><table id="keyTable"></table></div></div>
+    <div class="panel"><h3>Theo provider</h3><div style="overflow-x:auto"><table id="provTable"></table></div></div>
+  </div>
+</div>
+<div class="detail" id="detail"><div class="box" id="detailBox"></div></div>
+<script>
+// ---- configuration -----------------------------------------------------------
+// The page is served same-origin from the CPA management frontend, so relative
+// /v0/management/... requests carry the CPAMC session automatically when the
+// host supports cookie/auth passthrough. A manual key is the fallback.
+var API_BASE = "/v0/management/plugins/usage-statistics";
+function mgmtKey() {
+  try { var v = localStorage.getItem("cli-proxy-auth"); if (v) return v; } catch (e) {}
+  try { var s = sessionStorage.getItem("cli-proxy-auth"); if (s) return s; } catch (e) {}
+  var inp = document.getElementById("keyInput");
+  return inp && inp.value ? inp.value.trim() : "";
+}
+function api(path) {
+  var headers = { "Accept": "application/json" };
+  var k = mgmtKey();
+  if (k) headers["Authorization"] = "Bearer " + k;
+  return fetch(API_BASE + path, { headers: headers }).then(function (r) {
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return r.json();
+  });
+}
+// ---- theme -------------------------------------------------------------------
+function applyTheme() {
+  var dark = false;
+  try {
+    var t = localStorage.getItem("cpamc-theme") || localStorage.getItem("theme");
+    if (t === "dark" || (!t && matchMedia("(prefers-color-scheme: dark)").matches)) dark = true;
+  } catch (e) {}
+  document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+}
+applyTheme();
+setInterval(applyTheme, 1000);
+// ---- helpers -----------------------------------------------------------------
+var fmt = new Intl.NumberFormat("vi-VN");
+function n(x) { return fmt.format(x || 0); }
+function pct(ok, total) { return total > 0 ? (100 * ok / total).toFixed(1) + "%" : "–"; }
+function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+  return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+});}
+function rangeParams() {
+  var sel = document.getElementById("rangeSel").value;
+  if (sel === "all") return "";
+  var end = new Date(); var start = new Date();
+  if (sel === "today") { start.setHours(0, 0, 0, 0); }
+  else { start.setDate(start.getDate() - (sel === "7d" ? 7 : 30)); }
+  return "?start=" + encodeURIComponent(start.toISOString()) +
+         "&end=" + encodeURIComponent(end.toISOString());
+}
+// ---- overview ----------------------------------------------------------------
+function renderCards(t) {
+  var okCalls = t.calls - t.failed;
+  var cards = [
+    ["Requests", n(t.calls), pct(okCalls, t.calls) + " success"],
+    ["Tokens tổng", n(t.total_tokens), "in " + n(t.input_tokens) + " · out " + n(t.output_tokens)],
+    ["Reasoning + Cache", n(t.reasoning_tokens + t.cached_tokens), "reason " + n(t.reasoning_tokens) + " · cache " + n(t.cached_tokens)],
+    ["Avg TTFT", (t.avg_ttft_ms / 1000).toFixed(2) + "s", "first token"],
+    ["Avg latency", (t.avg_latency_ms / 1000).toFixed(2) + "s", "end-to-end"],
+    ["Thất bại", n(t.failed), pct(t.failed, t.calls) + " của tổng"]
+  ];
+  document.getElementById("cards").innerHTML = cards.map(function (c) {
+    return '<div class="card"><div class="lbl">' + c[0] + '</div><div class="val">' + c[1] + '</div><div class="sub">' + c[2] + '</div></div>';
+  }).join("");
+}
+function renderHourChart(byHour) {
+  var el = document.getElementById("hourChart");
+  el.innerHTML = "";
+  if (!byHour || !byHour.length) { el.innerHTML = '<span class="muted">Chưa có dữ liệu</span>'; return; }
+  var w = Math.max(320, Math.min(1040, 30 * byHour.length + 60));
+  el.style.height = "220px";
+  var dark = document.documentElement.getAttribute("data-theme") === "dark";
+  var gridColor = dark ? "#26304a" : "#e5e7eb", textColor = dark ? "#8b93a7" : "#6b7280";
+  // Simple SVG bar chart (no external deps).
+  var maxCalls = 1; byHour.forEach(function (h) { if (h.calls > maxCalls) maxCalls = h.calls; });
+  var bw = Math.max(4, Math.floor((w - 60) / byHour.length) - 6);
+  var svg = '<svg width="100%" viewBox="0 0 ' + w + ' 220" preserveAspectRatio="xMinYMid meet">';
+  for (var i = 0; i <= 2; i++) {
+    var y = 20 + i * 60;
+    svg += '<line x1="46" y1="' + y + '" x2="' + (w - 10) + '" y2="' + y + '" stroke="' + gridColor + '" stroke-width="1"/>';
+  }
+  byHour.forEach(function (h, i) {
+    var x = 52 + i * (bw + 6);
+    var ok = h.calls - h.failed;
+    var okH = Math.round((h.calls ? ok / h.calls : 0) * 160);
+    var badH = Math.round((h.calls ? h.failed / h.calls : 0) * 160);
+    if (h.calls === 0) return;
+    svg += '<g><title>' + esc(h.hour) + ' — ' + h.calls + ' calls, ' + n(h.total_tokens) + ' tokens</title>';
+    svg += '<rect x="' + x + '" y="' + (180 - okH) + '" width="' + bw + '" height="' + okH + '" fill="#16a34a" opacity="0.85" rx="2"/>';
+    if (badH > 0) svg += '<rect x="' + x + '" y="' + (180 - okH - badH) + '" width="' + bw + '" height="' + badH + '" fill="#ef4444" opacity="0.9" rx="2"/>';
+    svg += '</g>';
+  });
+  svg += '<text x="4" y="24" font-size="10" fill="' + textColor + '">' + n(maxCalls) + '</text>';
+  svg += '<text x="4" y="184" font-size="10" fill="' + textColor + '">0</text>';
+  if (byHour.length) svg += '<text x="52" y="200" font-size="10" fill="' + textColor + '">' + esc(byHour[0].hour) + '</text>';
+  if (byHour.length > 1) svg += '<text x="' + (w - 120) + '" y="200" font-size="10" fill="' + textColor + '">' + esc(byHour[byHour.length - 1].hour) + '</text>';
+  svg += '</svg>';
+  el.innerHTML = svg;
+}
+function renderStatus(scs) {
+  var el = document.getElementById("statusPanel");
+  if (!scs || !scs.length) { el.innerHTML = '<span class="muted">Không có lỗi nào 🎉</span>'; return; }
+  var maxC = scs[0].calls;
+  el.innerHTML = scs.map(function (s) {
+    var w = Math.max(4, Math.round(100 * s.calls / maxC));
+    return '<div style="display:flex;align-items:center;gap:8px;margin:4px 0">' +
+      '<span style="width:64px;font-weight:600">HTTP ' + s.status_code + '</span>' +
+      '<div class="bar" style="flex:1"><span style="width:' + w + '%"></span></div>' +
+      '<span style="width:70px;text-align:right">' + n(s.calls) + '</span></div>';
+  }).join("");
+}
+// ---- group tables ------------------------------------------------------------
+function groupRows(gs, showSub) {
+  if (!gs || !gs.length) return '<tr><td colspan="9" class="muted">Chưa có dữ liệu</td></tr>';
+  return gs.map(function (g) {
+    var ok = g.calls - g.failed;
+    var sub = showSub && g.sub ? ' <span class="muted">→ ' + esc(g.sub) + '</span>' : '';
+    return '<tr><td>' + esc(g.name) + sub + '</td>' +
+      '<td class="num">' + n(g.calls) + '</td>' +
+      '<td class="num"><span class="pill ' + (g.failed > 0 ? "bad" : "ok") + '">' + pct(ok, g.calls) + '</span></td>' +
+      '<td class="num">' + n(g.input_tokens) + '</td>' +
+      '<td class="num">' + n(g.output_tokens) + '</td>' +
+      '<td class="num">' + n(g.total_tokens) + '</td>' +
+      '<td class="num">' + (g.avg_ttft_ms / 1000).toFixed(2) + 's</td>' +
+      '<td class="num">' + (g.avg_latency_ms / 1000).toFixed(2) + 's</td></tr>';
+  }).join("");
+}
+function groupHeader() {
+  return '<tr><th>Tên</th><th class="num">Calls</th><th class="num">Success</th><th class="num">In</th><th class="num">Out</th><th class="num">Tokens</th><th class="num">TTFT</th><th class="num">Latency</th></tr>';
+}
+// ---- requests ----------------------------------------------------------------
+var reqOffset = 0, REQ_LIMIT = 50;
+function renderRequests(page) {
+  var t = document.getElementById("reqTable");
+  var head = '<tr><th>Thời gian</th><th>Key</th><th>Provider</th><th>Model</th><th class="num">In/Out</th><th class="num">TTFT</th><th class="num">Latency</th><th>Kết quả</th></tr>';
+  if (!page || !page.rows || !page.rows.length) {
+    t.innerHTML = head + '<tr><td colspan="8" class="muted">Chưa có dữ liệu</td></tr>';
+    document.getElementById("pageInfo").textContent = "–";
+    return;
+  }
+  t.innerHTML = head + page.rows.map(function (r) {
+    var ok = !r.failed;
+    return '<tr class="clickable" data-id="' + esc(r.id) + '">' +
+      '<td>' + esc((r.timestamp || "").replace("T", " ").replace("Z", "").slice(0, 19)) + '</td>' +
+      '<td>' + esc(maskKey(r.api_key)) + '</td>' +
+      '<td>' + esc(r.provider) + '</td>' +
+      '<td>' + esc(r.model) + (r.alias ? ' <span class="muted">(' + esc(r.alias) + ')</span>' : '') + '</td>' +
+      '<td class="num">' + n(r.tokens.input_tokens) + '/' + n(r.tokens.output_tokens) + '</td>' +
+      '<td class="num">' + (r.ttft_ms / 1000).toFixed(2) + 's</td>' +
+      '<td class="num">' + (r.latency_ms / 1000).toFixed(2) + 's</td>' +
+      '<td><span class="pill ' + (ok ? "ok" : "bad") + '">' + (ok ? "OK" : "HTTP " + r.failure_status_code) + '</span></td></tr>';
+  }).join("");
+  document.getElementById("pageInfo").textContent =
+    (page.offset + 1) + "–" + (page.offset + page.rows.length) + " / " + n(page.total);
+  bindRows();
+}
+function maskKey(k) {
+  if (!k) return "–";
+  if (k.length <= 8) return k;
+  return k.slice(0, 5) + "…" + k.slice(-4);
+}
+function bindRows() {
+  var rows = document.querySelectorAll("#reqTable tr.clickable");
+  for (var i = 0; i < rows.length; i++) {
+    rows[i].onclick = function () {
+      var id = this.getAttribute("data-id");
+      api("/usage/requests?limit=500&offset=0&model=&result=").then(function (page) {
+        var row = page.rows.filter(function (r) { return r.id === id; })[0];
+        if (row) showDetail(row);
+      }).catch(function (e) { alert("Không tải được chi tiết: " + e.message); });
+    };
+  }
+}
+function showDetail(r) {
+  var box = document.getElementById("detailBox");
+  var html = '<h3 style="margin-top:0">Chi tiết request</h3><table>' +
+    row("ID", esc(r.id)) +
+    row("Thời gian", esc(r.timestamp)) +
+    row("API key", esc(r.api_key)) +
+    row("Provider", esc(r.provider)) +
+    row("Model", esc(r.model)) +
+    row("Alias", esc(r.alias || "–")) +
+    row("Source", esc(r.source)) +
+    row("Auth", esc(r.auth_type) + " " + esc(r.auth_id) + " #" + esc(r.auth_index)) +
+    row("Executor", esc(r.executor_type)) +
+    row("Reasoning", esc(r.reasoning_effort || "–")) +
+    row("Service tier", esc(r.service_tier || "–")) +
+    row("Latency", n(r.latency_ms) + " ms · TTFT " + n(r.ttft_ms) + " ms") +
+    row("Tokens", "in " + n(r.tokens.input_tokens) + " · out " + n(r.tokens.output_tokens) +
+      " · reasoning " + n(r.tokens.reasoning_tokens) + " · cache " + n(r.tokens.cached_tokens)) +
+    row("Kết quả", r.failed ? '<span class="err">FAILED HTTP ' + r.failure_status_code + '</span>' : '<span style="color:var(--ok);font-weight:600">OK</span>') +
+    '</table>';
+  if (r.failed && r.failure_body) html += '<h3>Failure body</h3><pre>' + esc(r.failure_body) + '</pre>';
+  html += '<div style="text-align:right;margin-top:10px"><button class="sel" onclick="document.getElementById(\'detail\').style.display=\'none\'">Đóng</button></div>';
+  box.innerHTML = html;
+  document.getElementById("detail").style.display = "flex";
+}
+function row(k, v) { return '<tr><th style="width:120px">' + k + '</th><td>' + v + '</td></tr>'; }
+// ---- data loading ------------------------------------------------------------
+var lastSummary = null;
+function loadAll() {
+  api("/usage/summary" + rangeParams()).then(function (s) {
+    lastSummary = s;
+    renderCards(s.totals);
+    renderHourChart(s.by_hour);
+    renderStatus(s.status_codes);
+    document.getElementById("modelTable").innerHTML = groupHeader() + groupRows(s.by_model, false);
+    document.getElementById("aliasTable").innerHTML = groupHeader() + groupRows(s.by_alias, true);
+    document.getElementById("keyTable").innerHTML = groupHeader() + groupRows(s.by_api_key, false);
+    document.getElementById("provTable").innerHTML = groupHeader() + groupRows(s.by_provider, false);
+    fillFilters(s);
+  }).catch(function (e) {
+    if (String(e.message).indexOf("401") >= 0) showKeyInput();
+    document.getElementById("cards").innerHTML = '<div class="card err">Lỗi tải dữ liệu: ' + esc(e.message) + '</div>';
+  });
+  loadRequests();
+}
+function fillFilters(s) {
+  var fm = document.getElementById("fModel"), fk = document.getElementById("fKey");
+  var mPrev = fm.value, kPrev = fk.value;
+  var mOpts = '<option value="">Model: tất cả</option>' + (s.by_model || []).map(function (g) {
+    return '<option value="' + esc(g.name) + '">' + esc(g.name) + '</option>';
+  }).join("");
+  var kOpts = '<option value="">Key: tất cả</option>' + (s.by_api_key || []).map(function (g) {
+    return '<option value="' + esc(g.name) + '">' + esc(maskKey(g.name)) + '</option>';
+  }).join("");
+  fm.innerHTML = mOpts; fm.value = mPrev;
+  fk.innerHTML = kOpts; fk.value = kPrev;
+}
+function loadRequests() {
+  var q = "?limit=" + REQ_LIMIT + "&offset=" + reqOffset;
+  var m = document.getElementById("fModel").value;
+  var k = document.getElementById("fKey").value;
+  var r2 = document.getElementById("fResult").value;
+  var rp = rangeParams();
+  if (rp) q += "&" + rp.slice(1) + (m ? "&model=" + encodeURIComponent(m) : "") + (k ? "&api_key=" + encodeURIComponent(k) : "") + (r2 ? "&result=" + r2 : "");
+  else q += (m ? "&model=" + encodeURIComponent(m) : "") + (k ? "&api_key=" + encodeURIComponent(k) : "") + (r2 ? "&result=" + r2 : "");
+  api("/usage/requests" + q).then(renderRequests).catch(function (e) {
+    document.getElementById("reqTable").innerHTML = '<tr><td class="err">Lỗi: ' + esc(e.message) + '</td></tr>';
+  });
+}
+function showKeyInput() {
+  var inp = document.getElementById("keyInput");
+  inp.style.display = "inline-block";
+  inp.placeholder = "Management key (cần xác thực)";
+}
+// ---- events ------------------------------------------------------------------
+document.getElementById("rangeSel").onchange = function () { reqOffset = 0; loadAll(); };
+document.getElementById("keyInput").onchange = function () { reqOffset = 0; loadAll(); };
+document.getElementById("fModel").onchange = function () { reqOffset = 0; loadRequests(); };
+document.getElementById("fKey").onchange = function () { reqOffset = 0; loadRequests(); };
+document.getElementById("fResult").onchange = function () { reqOffset = 0; loadRequests(); };
+document.getElementById("prevBtn").onclick = function () {
+  reqOffset = Math.max(0, reqOffset - REQ_LIMIT); loadRequests();
+};
+document.getElementById("nextBtn").onclick = function () {
+  reqOffset = reqOffset + REQ_LIMIT; loadRequests();
+};
+document.getElementById("detail").onclick = function (ev) {
+  if (ev.target === this) this.style.display = "none";
+};
+(function () {
+  var tabs = document.querySelectorAll(".tab");
+  var panes = ["overview", "models", "requests", "breakdown"];
+  for (var i = 0; i < tabs.length; i++) {
+    tabs[i].onclick = function () {
+      for (var j = 0; j < tabs.length; j++) tabs[j].classList.remove("on");
+      this.classList.add("on");
+      var id = this.getAttribute("data-tab");
+      for (var p = 0; p < panes.length; p++) {
+        document.getElementById("tab-" + panes[p]).style.display = "none";
+      }
+      document.getElementById("tab-" + id).style.display = "block";
+    };
+  }
+})();
+loadAll();
+</script>
+</body>
+</html>

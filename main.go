@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -13,6 +14,9 @@ import (
 	"github.com/google/uuid"
 )
 
+//go:embed dashboard.html
+var dashboardHTML string
+
 const (
 	abiVersion uint32 = 1
 	pluginID          = "usage-statistics"
@@ -21,7 +25,16 @@ const (
 	// mounts it under /v0/management, producing
 	// /v0/management/plugins/usage-statistics/usage.
 	managementUsagePath = "/plugins/" + pluginID + "/usage"
-	insertTimeout       = 5 * time.Second
+	// managementSummaryPath and managementRequestsPath extend the API with a
+	// SQL-aggregated dashboard summary and a paginated request listing.
+	managementSummaryPath  = "/plugins/" + pluginID + "/usage/summary"
+	managementRequestsPath = "/plugins/" + pluginID + "/usage/requests"
+	// dashboardPath is the FULL public resource URL the browser requests. CPA
+	// mounts Resource routes at /v0/resource/plugins/<id>/<registered Path>
+	// and dispatches the request to the plugin's management.handle with this
+	// full path (verified against the model-router plugin pattern).
+	dashboardPath = "/v0/resource/plugins/" + pluginID + "/dashboard"
+	insertTimeout = 5 * time.Second
 )
 
 // Overridable at build time via -ldflags "-X main.pluginVersion=...".
@@ -125,7 +138,8 @@ func registerResponse() registerResponsePayload {
 }
 
 type managementRegistrationPayload struct {
-	Routes []managementRoute `json:"routes"`
+	Routes    []managementRoute   `json:"routes"`
+	Resources []resourceRouteInfo `json:"resources"`
 }
 
 type managementRoute struct {
@@ -134,11 +148,32 @@ type managementRoute struct {
 	Description string `json:"Description"`
 }
 
+// resourceRouteInfo follows the CPA plugin resource-menu pattern (as used by
+// model-router): a public HTML page mounted under /v0/resource/plugins/<id>/...
+// that the management frontend embeds in its Plugins menu. Menu is the label
+// shown in the sidebar.
+type resourceRouteInfo struct {
+	Path        string `json:"Path"`
+	Menu        string `json:"Menu"`
+	Description string `json:"Description"`
+}
+
 func managementRegistration() managementRegistrationPayload {
 	return managementRegistrationPayload{
 		Routes: []managementRoute{
 			{Method: "GET", Path: managementUsagePath, Description: "Query persisted usage grouped by api key and model."},
+			{Method: "GET", Path: managementSummaryPath, Description: "Dashboard aggregate: totals, per-hour, per-model, per-alias, per-provider, per-api-key."},
+			{Method: "GET", Path: managementRequestsPath, Description: "Paginated request-level usage listing with filters."},
 			{Method: "DELETE", Path: managementUsagePath, Description: "Delete persisted usage records by id."},
+		},
+		Resources: []resourceRouteInfo{
+			{
+				// Relative to /v0/resource/plugins/usage-statistics/. The host
+				// shows "Usage Statistics" in the management Plugins menu.
+				Path:        "/dashboard",
+				Menu:        "Usage Statistics",
+				Description: "Usage dashboard: overview, models, requests, keys & providers.",
+			},
 		},
 	}
 }
@@ -271,14 +306,100 @@ func handleManagement(request []byte) ([]byte, error) {
 			return nil, err
 		}
 	}
-	switch strings.ToUpper(strings.TrimSpace(req.Method)) {
-	case "GET":
-		return usageGet(req)
-	case "DELETE":
-		return usageDelete(req)
+	path := strings.TrimRight(strings.TrimSpace(req.Path), "/")
+	switch {
+	case path == strings.TrimRight(dashboardPath, "/"):
+		// Public inline UI page (resource route). No management key needed to
+		// LOAD the page; its JS fetches data through /v0/management which the
+		// host authenticates.
+		if !strings.EqualFold(strings.TrimSpace(req.Method), "GET") {
+			return okEnvelope(jsonManagementResponse(405, map[string]string{"error": "method not allowed"}))
+		}
+		return okEnvelope(jsonManagementResponseHTML(dashboardHTML))
+	case path == strings.TrimRight(managementUsagePath, "/"):
+		// Raw record listing / delete (upstream behaviour, kept intact).
+		switch strings.ToUpper(strings.TrimSpace(req.Method)) {
+		case "GET":
+			return usageGet(req)
+		case "DELETE":
+			return usageDelete(req)
+		default:
+			return okEnvelope(jsonManagementResponse(405, map[string]string{"error": "method not allowed"}))
+		}
+	case path == strings.TrimRight(managementSummaryPath, "/"):
+		if !strings.EqualFold(strings.TrimSpace(req.Method), "GET") {
+			return okEnvelope(jsonManagementResponse(405, map[string]string{"error": "method not allowed"}))
+		}
+		return usageSummaryGet(req)
+	case path == strings.TrimRight(managementRequestsPath, "/"):
+		if !strings.EqualFold(strings.TrimSpace(req.Method), "GET") {
+			return okEnvelope(jsonManagementResponse(405, map[string]string{"error": "method not allowed"}))
+		}
+		return usageRequestsGet(req)
 	default:
-		return okEnvelope(jsonManagementResponse(405, map[string]string{"error": "method not allowed"}))
+		return okEnvelope(jsonManagementResponse(404, map[string]string{"error": "not found"}))
 	}
+}
+
+// parsePageFilter extracts the request-listing filters from the query params.
+func parsePageFilter(query map[string][]string) (QueryRange, PageFilter) {
+	rng, _ := parseUsageRange(query)
+	filter := PageFilter{}
+	if v := firstValue(query, "model"); strings.TrimSpace(v) != "" {
+		filter.Model = strings.TrimSpace(v)
+	}
+	if v := firstValue(query, "provider"); strings.TrimSpace(v) != "" {
+		filter.Provider = strings.TrimSpace(v)
+	}
+	if v := firstValue(query, "api_key"); strings.TrimSpace(v) != "" {
+		filter.APIKey = strings.TrimSpace(v)
+	}
+	switch strings.ToLower(firstValue(query, "result")) {
+	case "failed":
+		failed := true
+		filter.Failed = &failed
+	case "success":
+		failed := false
+		filter.Failed = &failed
+	}
+	filter.Limit = toConfigInt(firstValue(query, "limit"))
+	filter.Offset = toConfigInt(firstValue(query, "offset"))
+	return rng, filter
+}
+
+// usageSummaryGet computes the dashboard aggregate for the requested range.
+func usageSummaryGet(req managementRequest) ([]byte, error) {
+	rng, errResp := parseUsageRange(req.Query)
+	if errResp != nil {
+		return okEnvelope(*errResp)
+	}
+	store := currentStore()
+	if store == nil {
+		return okEnvelope(jsonManagementResponse(500, map[string]string{"error": "usage store unavailable"}))
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), insertTimeout)
+	defer cancel()
+	summary, err := store.Summary(ctx, rng)
+	if err != nil {
+		return okEnvelope(jsonManagementResponse(500, map[string]string{"error": "failed to summarize usage"}))
+	}
+	return okEnvelope(jsonManagementResponse(200, summary))
+}
+
+// usageRequestsGet returns one page of request-level records.
+func usageRequestsGet(req managementRequest) ([]byte, error) {
+	rng, filter := parsePageFilter(req.Query)
+	store := currentStore()
+	if store == nil {
+		return okEnvelope(jsonManagementResponse(500, map[string]string{"error": "usage store unavailable"}))
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), insertTimeout)
+	defer cancel()
+	page, err := store.ListPage(ctx, rng, filter)
+	if err != nil {
+		return okEnvelope(jsonManagementResponse(500, map[string]string{"error": "failed to list usage"}))
+	}
+	return okEnvelope(jsonManagementResponse(200, page))
 }
 
 func usageGet(req managementRequest) ([]byte, error) {
@@ -375,6 +496,22 @@ func jsonManagementResponse(status int, payload any) managementResponse {
 		StatusCode: status,
 		Headers:    map[string][]string{"Content-Type": {"application/json; charset=utf-8"}},
 		Body:       body,
+	}
+}
+
+// jsonManagementResponseHTML returns the inline dashboard page with the same
+// security headers the model-router resource page uses.
+func jsonManagementResponseHTML(html string) managementResponse {
+	return managementResponse{
+		StatusCode: 200,
+		Headers: map[string][]string{
+			"Content-Type":             {"text/html; charset=utf-8"},
+			"Cache-Control":            {"no-store"},
+			"Referrer-Policy":          {"no-referrer"},
+			"X-Content-Type-Options":   {"nosniff"},
+			"Content-Security-Policy":  {"default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'"},
+		},
+		Body: []byte(html),
 	}
 }
 

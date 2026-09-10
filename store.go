@@ -437,3 +437,294 @@ func boolToInt(value bool) int {
 	}
 	return 0
 }
+
+// ---- dashboard queries ------------------------------------------------------
+
+// rangeWhere builds the WHERE clause for a time range. It returns the clause
+// (empty when unbounded) and the extended argument slice.
+func rangeWhere(rng QueryRange, args []any) (string, []any) {
+	where := make([]string, 0, 2)
+	if rng.Start != nil && !rng.Start.IsZero() {
+		where = append(where, "timestamp >= ?")
+		args = append(args, formatTimestamp(*rng.Start))
+	}
+	if rng.End != nil && !rng.End.IsZero() {
+		where = append(where, "timestamp < ?")
+		args = append(args, formatTimestamp(*rng.End))
+	}
+	if len(where) == 0 {
+		return "", args
+	}
+	return " WHERE " + strings.Join(where, " AND "), args
+}
+
+// Summary computes the full dashboard aggregate for the time range: totals,
+// hourly trend, per-model, per-alias, per-provider, per-api-key groupings and
+// failure status-code counts. Aggregation happens in SQL so the payload stays
+// small no matter how many raw records exist.
+func (s *SQLiteStore) Summary(ctx context.Context, rng QueryRange) (*UsageSummary, error) {
+	summary := &UsageSummary{
+		Start:       rng.Start,
+		End:         rng.End,
+		ByHour:      []HourStat{},
+		ByModel:     []GroupStat{},
+		ByAlias:     []GroupStat{},
+		ByProvider:  []GroupStat{},
+		ByAPIKey:    []GroupStat{},
+		StatusCodes: []StatusCodeStat{},
+	}
+	if s == nil || s.db == nil {
+		return summary, nil
+	}
+	if err := s.fillTotals(ctx, rng, summary); err != nil {
+		return nil, err
+	}
+	if err := s.fillGrouped(ctx, rng, summary); err != nil {
+		return nil, err
+	}
+	if err := s.fillByHour(ctx, rng, summary); err != nil {
+		return nil, err
+	}
+	if err := s.fillStatusCodes(ctx, rng, summary); err != nil {
+		return nil, err
+	}
+	return summary, nil
+}
+
+func (s *SQLiteStore) fillTotals(ctx context.Context, rng QueryRange, summary *UsageSummary) error {
+	where, args := rangeWhere(rng, nil)
+	query := `SELECT COUNT(*), COALESCE(SUM(failed),0),
+		COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0),
+		COALESCE(SUM(reasoning_tokens),0), COALESCE(SUM(cached_tokens),0),
+		COALESCE(SUM(total_tokens),0),
+		COALESCE(AVG(latency_ms),0), COALESCE(AVG(ttft_ms),0)
+		FROM usage_records` + where
+	row := s.db.QueryRowContext(ctx, query, args...)
+	t := &summary.Totals
+	return row.Scan(&t.Calls, &t.Failed, &t.InputTokens, &t.OutputTokens,
+		&t.ReasoningTokens, &t.CachedTokens, &t.TotalTokens, &t.AvgLatencyMs, &t.AvgTTFTMs)
+}
+
+// groupKeySQL mirrors the Go groupingKey helper in SQL so api_key grouping
+// falls back to provider, then "unknown".
+const groupKeySQL = "CASE WHEN TRIM(api_key) != '' THEN api_key WHEN TRIM(provider) != '' THEN provider ELSE 'unknown' END"
+
+func (s *SQLiteStore) fillGrouped(ctx context.Context, rng QueryRange, summary *UsageSummary) error {
+	type dim struct {
+		selectExpr string
+		subExpr    string
+		target     *[]GroupStat
+		hasSub     bool
+	}
+	dims := []dim{
+		{selectExpr: "model", subExpr: "", target: &summary.ByModel, hasSub: false},
+		// For alias groupings, fall back to the model name for direct calls so
+		// every row still identifies what ran; Sub keeps the real model.
+		{selectExpr: "COALESCE(NULLIF(alias,''), model)", subExpr: "model", target: &summary.ByAlias, hasSub: true},
+		{selectExpr: "COALESCE(NULLIF(provider,''), 'unknown')", subExpr: "", target: &summary.ByProvider, hasSub: false},
+		{selectExpr: groupKeySQL, subExpr: "", target: &summary.ByAPIKey, hasSub: false},
+	}
+	for _, d := range dims {
+		where, args := rangeWhere(rng, nil)
+		query := "SELECT " + d.selectExpr
+		if d.hasSub {
+			query += ", " + d.subExpr
+		}
+		query += `, COUNT(*), COALESCE(SUM(failed),0),
+			COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0),
+			COALESCE(SUM(total_tokens),0),
+			COALESCE(AVG(latency_ms),0), COALESCE(AVG(ttft_ms),0)
+			FROM usage_records` + where + `
+			GROUP BY ` + d.selectExpr + `
+			ORDER BY COUNT(*) DESC, ` + d.selectExpr + ` ASC`
+		rows, err := s.db.QueryContext(ctx, query, args...)
+		if err != nil {
+			return fmt.Errorf("usage sqlite group by %s: %w", d.selectExpr, err)
+		}
+		out := *d.target
+		for rows.Next() {
+			var g GroupStat
+			var scanArgs []any
+			scanArgs = append(scanArgs, &g.Name)
+			if d.hasSub {
+				scanArgs = append(scanArgs, &g.Sub)
+			}
+			scanArgs = append(scanArgs, &g.Calls, &g.Failed, &g.InputTokens, &g.OutputTokens, &g.TotalTokens, &g.AvgLatencyMs, &g.AvgTTFTMs)
+			if err := rows.Scan(scanArgs...); err != nil {
+				rows.Close()
+				return fmt.Errorf("usage sqlite group scan: %w", err)
+			}
+			out = append(out, g)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return fmt.Errorf("usage sqlite group rows: %w", err)
+		}
+		rows.Close()
+		*d.target = out
+	}
+	return nil
+}
+
+func (s *SQLiteStore) fillByHour(ctx context.Context, rng QueryRange, summary *UsageSummary) error {
+	where, args := rangeWhere(rng, nil)
+	// Timestamps are stored as "YYYY-MM-DDTHH:MM:SS.nnnnnnnnnZ" (UTC), so the
+	// first 13 characters are the UTC hour bucket.
+	query := `SELECT substr(timestamp,1,13), COUNT(*), COALESCE(SUM(failed),0),
+		COALESCE(SUM(total_tokens),0)
+		FROM usage_records` + where + `
+		GROUP BY substr(timestamp,1,13)
+		ORDER BY substr(timestamp,1,13) ASC`
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("usage sqlite hour query: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var h HourStat
+		if err := rows.Scan(&h.Hour, &h.Calls, &h.Failed, &h.TotalTokens); err != nil {
+			return fmt.Errorf("usage sqlite hour scan: %w", err)
+		}
+		summary.ByHour = append(summary.ByHour, h)
+	}
+	return rows.Err()
+}
+
+func (s *SQLiteStore) fillStatusCodes(ctx context.Context, rng QueryRange, summary *UsageSummary) error {
+	where, args := rangeWhere(rng, nil)
+	if where != "" {
+		// rangeWhere already yields " WHERE <cond>"; append the extra
+		// conditions to the existing AND list.
+		where += " AND failed = 1 AND failure_status_code > 0"
+	} else {
+		where = " WHERE failed = 1 AND failure_status_code > 0"
+	}
+	query := `SELECT failure_status_code, COUNT(*)
+		FROM usage_records` + where + `
+		GROUP BY failure_status_code
+		ORDER BY COUNT(*) DESC`
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("usage sqlite status query: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var sc StatusCodeStat
+		if err := rows.Scan(&sc.StatusCode, &sc.Calls); err != nil {
+			return fmt.Errorf("usage sqlite status scan: %w", err)
+		}
+		summary.StatusCodes = append(summary.StatusCodes, sc)
+	}
+	return rows.Err()
+}
+
+// ListPage returns a paginated, filtered view of request-level records.
+func (s *SQLiteStore) ListPage(ctx context.Context, rng QueryRange, filter PageFilter) (*UsagePage, error) {
+	page := &UsagePage{Total: 0, Limit: filter.Limit, Offset: filter.Offset, Rows: []RequestDetail{}}
+	if s == nil || s.db == nil {
+		return page, nil
+	}
+	where := make([]string, 0, 6)
+	args := make([]any, 0, 8)
+	if rng.Start != nil && !rng.Start.IsZero() {
+		where = append(where, "timestamp >= ?")
+		args = append(args, formatTimestamp(*rng.Start))
+	}
+	if rng.End != nil && !rng.End.IsZero() {
+		where = append(where, "timestamp < ?")
+		args = append(args, formatTimestamp(*rng.End))
+	}
+	if filter.Model != "" {
+		where = append(where, "(model = ? OR alias = ?)")
+		args = append(args, filter.Model, filter.Model)
+	}
+	if filter.Provider != "" {
+		where = append(where, "provider = ?")
+		args = append(args, filter.Provider)
+	}
+	if filter.APIKey != "" {
+		where = append(where, "api_key = ?")
+		args = append(args, filter.APIKey)
+	}
+	if filter.Failed != nil {
+		where = append(where, "failed = ?")
+		args = append(args, boolToInt(*filter.Failed))
+	}
+	whereSQL := ""
+	if len(where) > 0 {
+		whereSQL = " WHERE " + strings.Join(where, " AND ")
+	}
+
+	countRow := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM usage_records"+whereSQL, args...)
+	if err := countRow.Scan(&page.Total); err != nil {
+		return nil, fmt.Errorf("usage sqlite count: %w", err)
+	}
+
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	page.Limit = limit
+	queryArgs := append(append([]any{}, args...), limit, filter.Offset)
+	query := `SELECT id, timestamp, api_key, provider, model, alias, source, auth_id, auth_index, auth_type, executor_type,
+		reasoning_effort, service_tier, latency_ms, ttft_ms,
+		input_tokens, output_tokens, reasoning_tokens, cached_tokens, cache_read_tokens, cache_creation_tokens, total_tokens,
+		failed, failure_status_code, failure_body
+		FROM usage_records` + whereSQL + `
+		ORDER BY timestamp DESC, id DESC
+		LIMIT ? OFFSET ?`
+	rows, err := s.db.QueryContext(ctx, query, queryArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("usage sqlite page query: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var timestampText string
+		var apiKey string
+		var failedInt int
+		detail := RequestDetail{}
+		if err := rows.Scan(
+			&detail.ID,
+			&timestampText,
+			&apiKey,
+			&detail.Provider,
+			&detail.Model,
+			&detail.Alias,
+			&detail.Source,
+			&detail.AuthID,
+			&detail.AuthIndex,
+			&detail.AuthType,
+			&detail.ExecutorType,
+			&detail.ReasoningEffort,
+			&detail.ServiceTier,
+			&detail.LatencyMs,
+			&detail.TTFTMs,
+			&detail.Tokens.InputTokens,
+			&detail.Tokens.OutputTokens,
+			&detail.Tokens.ReasoningTokens,
+			&detail.Tokens.CachedTokens,
+			&detail.Tokens.CacheReadTokens,
+			&detail.Tokens.CacheCreationTokens,
+			&detail.Tokens.TotalTokens,
+			&failedInt,
+			&detail.FailureStatusCode,
+			&detail.FailureBody,
+		); err != nil {
+			return nil, fmt.Errorf("usage sqlite page scan: %w", err)
+		}
+		parsed, err := time.Parse(time.RFC3339Nano, timestampText)
+		if err != nil {
+			return nil, fmt.Errorf("usage sqlite parse timestamp: %w", err)
+		}
+		detail.Timestamp = parsed.UTC()
+		detail.Failed = failedInt != 0
+		page.Rows = append(page.Rows, detail)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("usage sqlite page rows: %w", err)
+	}
+	return page, nil
+}
