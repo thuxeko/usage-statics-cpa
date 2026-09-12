@@ -85,8 +85,53 @@ func (r *routerStore) connect() (*sql.DB, error) {
 	return db, nil
 }
 
+// ProvidersList returns the list of unique providers discovered in recent router records.
+func (r *routerStore) ProvidersList(ctx context.Context) ([]string, error) {
+	db, err := r.connect()
+	if err != nil {
+		return nil, err
+	}
+	// Extract unique providers from requests JSON payload
+	rows, err := db.QueryContext(ctx, `SELECT DISTINCT json_extract(payload, '$.provider') FROM requests WHERE json_extract(payload, '$.provider') IS NOT NULL AND json_extract(payload, '$.provider') != '' ORDER BY 1 ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []string
+	for rows.Next() {
+		var p string
+		if err := rows.Scan(&p); err == nil && p != "" {
+			list = append(list, p)
+		}
+	}
+	return list, nil
+}
+
+// ModelsForProvider returns distinct models recorded for a specific provider.
+func (r *routerStore) ModelsForProvider(ctx context.Context, provider string) ([]string, error) {
+	db, err := r.connect()
+	if err != nil {
+		return nil, err
+	}
+	rows, err := db.QueryContext(ctx, `SELECT DISTINCT json_extract(payload, '$.provider_model') FROM requests WHERE json_extract(payload, '$.provider') = ? AND json_extract(payload, '$.provider_model') IS NOT NULL ORDER BY 1 ASC`, provider)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []string
+	for rows.Next() {
+		var m string
+		if err := rows.Scan(&m); err == nil && m != "" {
+			list = append(list, m)
+		}
+	}
+	return list, nil
+}
+
 func (r *routerStore) close() {
-	if r.db != nil {
+	if r != nil && r.db != nil {
 		_ = r.db.Close()
 		r.db = nil
 	}

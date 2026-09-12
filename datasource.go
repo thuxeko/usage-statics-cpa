@@ -13,6 +13,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -20,6 +22,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 // resolveSource picks the usage source for a request. ?source= forces one;
@@ -250,6 +254,244 @@ func errorLogGetWithFile(req managementRequest) ([]byte, error) {
 		return okEnvelope(jsonManagementResponse(status, payload))
 	}
 	return errorLogGet(req)
+}
+
+// chatPayloadGet retrieves captured prompt and response preview for a request.
+func chatPayloadGet(req managementRequest) ([]byte, error) {
+	reqID := strings.TrimSpace(firstValue(req.Query, "id"))
+	rawTS := strings.TrimSpace(firstValue(req.Query, "ts"))
+	var ts time.Time
+	if rawTS != "" {
+		ts, _ = time.Parse(time.RFC3339Nano, rawTS)
+		if ts.IsZero() {
+			ts, _ = time.Parse(time.RFC3339, rawTS)
+		}
+	}
+
+	store := currentStore()
+	if store == nil {
+		return okEnvelope(jsonManagementResponse(200, map[string]any{"found": false}))
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	rec, err := store.GetChatPayload(ctx, reqID, ts)
+	if err != nil || rec == nil {
+		return okEnvelope(jsonManagementResponse(200, map[string]any{"found": false}))
+	}
+
+	return okEnvelope(jsonManagementResponse(200, map[string]any{
+		"found":            true,
+		"request_id":       rec.RequestID,
+		"timestamp":        rec.Timestamp,
+		"model":            rec.Model,
+		"prompt_preview":   rec.PromptPreview,
+		"response_preview": rec.ResponsePreview,
+	}))
+}
+
+type cpaConfigProvider struct {
+	Name     string   `json:"name"`
+	Prefix   string   `json:"prefix"`
+	BaseURL  string   `json:"base_url"`
+	Keys     []string `json:"keys"`
+	Disabled bool     `json:"disabled"`
+	Models   []string `json:"models"`
+}
+
+type cpaYAMLConfig struct {
+	OpenAICompatibility []struct {
+		Name          string   `yaml:"name"`
+		Prefix        string   `yaml:"prefix"`
+		BaseURL       string   `yaml:"base-url"`
+		Disabled      bool     `yaml:"disabled"`
+		APIKey        string   `yaml:"api-key"`
+		APIKeys       []string `yaml:"api-keys"`
+		APIKeyEntries []struct {
+			APIKey string `yaml:"api-key"`
+		} `yaml:"api-key-entries"`
+		Models []any `yaml:"models"`
+	} `yaml:"openai-compatibility"`
+}
+
+func findCPAConfigFile() string {
+	candidates := []string{
+		"/CLIProxyAPI/config.yaml",
+		"/mnt/dungchung/cliproxy/config.yaml",
+		filepath.Join(pluginLibraryDir(), "../config.yaml"),
+		filepath.Join(pluginLibraryDir(), "../../config.yaml"),
+		"config.yaml",
+	}
+	for _, c := range candidates {
+		fi, err := os.Stat(c)
+		if err != nil || fi.IsDir() || fi.Size() == 0 {
+			continue
+		}
+		return c
+	}
+	return ""
+}
+
+func readCPAConfigProviders() []cpaConfigProvider {
+	path := findCPAConfigFile()
+	if path == "" {
+		return nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var cfg cpaYAMLConfig
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil
+	}
+
+	var results []cpaConfigProvider
+	for _, item := range cfg.OpenAICompatibility {
+		name := strings.TrimSpace(item.Name)
+		if name == "" {
+			continue
+		}
+		var keys []string
+		for _, e := range item.APIKeyEntries {
+			k := strings.TrimSpace(e.APIKey)
+			if k != "" {
+				keys = append(keys, k)
+			}
+		}
+		for _, k := range item.APIKeys {
+			k = strings.TrimSpace(k)
+			if k != "" {
+				keys = append(keys, k)
+			}
+		}
+		if item.APIKey != "" {
+			k := strings.TrimSpace(item.APIKey)
+			if k != "" {
+				keys = append(keys, k)
+			}
+		}
+
+		var models []string
+		for _, m := range item.Models {
+			switch v := m.(type) {
+			case string:
+				if strings.TrimSpace(v) != "" {
+					models = append(models, strings.TrimSpace(v))
+				}
+			case map[string]any:
+				if n, ok := v["name"].(string); ok && strings.TrimSpace(n) != "" {
+					models = append(models, strings.TrimSpace(n))
+				}
+			}
+		}
+
+		results = append(results, cpaConfigProvider{
+			Name:     name,
+			Prefix:   item.Prefix,
+			BaseURL:  strings.TrimSpace(item.BaseURL),
+			Keys:     keys,
+			Disabled: item.Disabled,
+			Models:   models,
+		})
+	}
+	return results
+}
+
+// providersGet returns the list of ACTIVE (non-disabled) configured providers with their Base URLs and API Keys.
+func providersGet(req managementRequest) ([]byte, error) {
+	all := readCPAConfigProviders()
+	active := make([]cpaConfigProvider, 0, len(all))
+	for _, p := range all {
+		if p.Disabled {
+			continue
+		}
+		if len(p.Keys) == 0 {
+			continue
+		}
+		active = append(active, p)
+	}
+	return okEnvelope(jsonManagementResponse(200, map[string]any{
+		"providers": active,
+	}))
+}
+
+type proxyFetchRequest struct {
+	URL     string            `json:"url"`
+	Method  string            `json:"method"`
+	Headers map[string]string `json:"headers"`
+	Body    string            `json:"body"`
+}
+
+// proxyFetchHandler executes an HTTP request from CPA backend to upstream to prevent browser CORS issues.
+func proxyFetchHandler(req managementRequest) ([]byte, error) {
+	var pReq proxyFetchRequest
+	if err := json.Unmarshal(req.Body, &pReq); err != nil {
+		return okEnvelope(jsonManagementResponse(400, map[string]string{"error": "invalid json body"}))
+	}
+	targetURL := strings.TrimSpace(pReq.URL)
+	if targetURL == "" {
+		return okEnvelope(jsonManagementResponse(400, map[string]string{"error": "url is required"}))
+	}
+
+	method := strings.ToUpper(strings.TrimSpace(pReq.Method))
+	if method == "" {
+		method = "GET"
+	}
+
+	var reqBody io.Reader
+	if pReq.Body != "" {
+		reqBody = strings.NewReader(pReq.Body)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	defer cancel()
+
+	httpReq, err := http.NewRequestWithContext(ctx, method, targetURL, reqBody)
+	if err != nil {
+		return okEnvelope(jsonManagementResponse(400, map[string]string{"error": "failed to build request: " + err.Error()}))
+	}
+
+	for k, v := range pReq.Headers {
+		httpReq.Header.Set(k, v)
+	}
+	if httpReq.Header.Get("User-Agent") == "" {
+		httpReq.Header.Set("User-Agent", "CPA-ToolsHub/1.0")
+	}
+
+	client := &http.Client{
+		Timeout: 25 * time.Second,
+	}
+
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return okEnvelope(jsonManagementResponse(200, map[string]any{
+			"ok":          false,
+			"status_code": 502,
+			"error":       "upstream connection failed: " + err.Error(),
+		}))
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4*1024*1024))
+
+	var rawJSON any
+	if err := json.Unmarshal(respBody, &rawJSON); err == nil {
+		return okEnvelope(jsonManagementResponse(200, map[string]any{
+			"ok":          resp.StatusCode >= 200 && resp.StatusCode < 300,
+			"status_code": resp.StatusCode,
+			"data":        rawJSON,
+			"raw":         string(respBody),
+		}))
+	}
+
+	return okEnvelope(jsonManagementResponse(200, map[string]any{
+		"ok":          resp.StatusCode >= 200 && resp.StatusCode < 300,
+		"status_code": resp.StatusCode,
+		"raw":         string(respBody),
+		"error":       "response is not valid JSON",
+	}))
 }
 
 var _ = fmt.Sprintf // keep fmt import if unused by future edits

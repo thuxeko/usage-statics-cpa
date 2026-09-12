@@ -90,6 +90,16 @@ func (s *SQLiteStore) initSchema(ctx context.Context) error {
 )`,
 		`CREATE INDEX IF NOT EXISTS idx_usage_records_timestamp ON usage_records(timestamp)`,
 		`CREATE INDEX IF NOT EXISTS idx_usage_records_api_model ON usage_records(api_key, provider, model)`,
+		`CREATE TABLE IF NOT EXISTS chat_previews (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			request_id TEXT NOT NULL DEFAULT '',
+			timestamp TEXT NOT NULL,
+			model TEXT NOT NULL DEFAULT '',
+			prompt_preview TEXT NOT NULL DEFAULT '',
+			response_preview TEXT NOT NULL DEFAULT ''
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_chat_previews_req ON chat_previews(request_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_chat_previews_ts ON chat_previews(timestamp)`,
 	}
 	for _, statement := range statements {
 		if _, err := s.db.ExecContext(ctx, statement); err != nil {
@@ -348,15 +358,68 @@ func (s *SQLiteStore) DeleteBefore(ctx context.Context, cutoff time.Time) (int64
 	if s == nil || s.db == nil {
 		return 0, nil
 	}
-	res, err := s.db.ExecContext(ctx, "DELETE FROM usage_records WHERE timestamp < ?", formatTimestamp(cutoff))
+	tsStr := formatTimestamp(cutoff)
+	res, err := s.db.ExecContext(ctx, "DELETE FROM usage_records WHERE timestamp < ?", tsStr)
 	if err != nil {
 		return 0, fmt.Errorf("usage sqlite delete before: %w", err)
 	}
+	// Also prune old chat previews
+	_, _ = s.db.ExecContext(ctx, "DELETE FROM chat_previews WHERE timestamp < ?", tsStr)
 	rows, err := res.RowsAffected()
 	if err != nil {
 		return 0, fmt.Errorf("usage sqlite rows affected: %w", err)
 	}
 	return rows, nil
+}
+
+// ChatPayloadRecord describes a captured prompt/response preview.
+type ChatPayloadRecord struct {
+	RequestID       string `json:"request_id"`
+	Timestamp       string `json:"timestamp"`
+	Model           string `json:"model"`
+	PromptPreview   string `json:"prompt_preview"`
+	ResponsePreview string `json:"response_preview"`
+}
+
+// SaveChatPayload records a chat preview in usage.db.
+func (s *SQLiteStore) SaveChatPayload(ctx context.Context, requestID string, reqTS time.Time, model, prompt, response string) error {
+	if s == nil || s.db == nil {
+		return nil
+	}
+	tsStr := formatTimestamp(reqTS)
+	query := `INSERT INTO chat_previews (request_id, timestamp, model, prompt_preview, response_preview)
+		VALUES (?, ?, ?, ?, ?)`
+	_, err := s.db.ExecContext(ctx, query, requestID, tsStr, model, prompt, response)
+	return err
+}
+
+// GetChatPayload retrieves a chat preview by request_id or timestamp.
+func (s *SQLiteStore) GetChatPayload(ctx context.Context, requestID string, approxTS time.Time) (*ChatPayloadRecord, error) {
+	if s == nil || s.db == nil {
+		return nil, nil
+	}
+	var rec ChatPayloadRecord
+	var row *sql.Row
+	if strings.TrimSpace(requestID) != "" {
+		row = s.db.QueryRowContext(ctx, `SELECT request_id, timestamp, model, prompt_preview, response_preview 
+			FROM chat_previews WHERE request_id = ? ORDER BY id DESC LIMIT 1`, strings.TrimSpace(requestID))
+		err := row.Scan(&rec.RequestID, &rec.Timestamp, &rec.Model, &rec.PromptPreview, &rec.ResponsePreview)
+		if err == nil {
+			return &rec, nil
+		}
+	}
+	if !approxTS.IsZero() {
+		// Search within ±30 seconds of timestamp
+		start := formatTimestamp(approxTS.Add(-30 * time.Second))
+		end := formatTimestamp(approxTS.Add(30 * time.Second))
+		row = s.db.QueryRowContext(ctx, `SELECT request_id, timestamp, model, prompt_preview, response_preview 
+			FROM chat_previews WHERE timestamp >= ? AND timestamp <= ? ORDER BY id DESC LIMIT 1`, start, end)
+		err := row.Scan(&rec.RequestID, &rec.Timestamp, &rec.Model, &rec.PromptPreview, &rec.ResponsePreview)
+		if err == nil {
+			return &rec, nil
+		}
+	}
+	return nil, nil
 }
 
 // Close closes the underlying database.

@@ -35,6 +35,12 @@ const (
 	// managementErrorLogPath serves the CPA request-error log excerpt for one
 	// failed request (matched by timestamp + status code).
 	managementErrorLogPath = "/plugins/" + pluginID + "/error-log"
+	// managementPayloadPath serves captured prompt/response previews for chat requests.
+	managementPayloadPath = "/plugins/" + pluginID + "/payload"
+	// managementProvidersPath returns the list of known providers and models from CPA config.
+	managementProvidersPath = "/plugins/" + pluginID + "/providers"
+	// managementProxyFetchPath allows proxying fetch and probe calls to upstreams from backend.
+	managementProxyFetchPath = "/plugins/" + pluginID + "/proxy-fetch"
 	// dashboardPath is the FULL public resource URL the browser requests. CPA
 	// mounts Resource routes at /v0/resource/plugins/<id>/<registered Path>
 	// and dispatches the request to the plugin's management.handle with this
@@ -99,9 +105,62 @@ func handleMethod(method string, request []byte) ([]byte, error) {
 		return okEnvelope(managementRegistration())
 	case "management.handle":
 		return handleManagement(request)
+	case "request.intercept_before", "request.intercept_after":
+		return handleRequestIntercept(request)
+	case "response.intercept_after":
+		return handleResponseIntercept(request)
+	case "response.intercept_stream_chunk":
+		return handleStreamChunkIntercept(request)
 	default:
 		return errorEnvelope("unknown_method", "unknown method: "+method), nil
 	}
+}
+
+type requestInterceptRPC struct {
+	RequestID string `json:"RequestID"`
+	TraceID   string `json:"TraceID"`
+	Model     string `json:"Model"`
+	Body      []byte `json:"Body"`
+}
+
+func handleRequestIntercept(raw []byte) ([]byte, error) {
+	if len(raw) > 0 {
+		var req requestInterceptRPC
+		if err := json.Unmarshal(raw, &req); err == nil {
+			globalPayloadManager.recordInboundRequest(req.RequestID, req.TraceID, req.Model, req.Body)
+		}
+	}
+	return okEnvelope(map[string]any{})
+}
+
+type responseInterceptRPC struct {
+	RequestID string `json:"RequestID"`
+	Body      []byte `json:"Body"`
+}
+
+func handleResponseIntercept(raw []byte) ([]byte, error) {
+	if len(raw) > 0 {
+		var req responseInterceptRPC
+		if err := json.Unmarshal(raw, &req); err == nil {
+			globalPayloadManager.recordResponse(req.RequestID, req.Body)
+		}
+	}
+	return okEnvelope(map[string]any{})
+}
+
+type streamChunkInterceptRPC struct {
+	RequestID string `json:"RequestID"`
+	Body      []byte `json:"Body"`
+}
+
+func handleStreamChunkIntercept(raw []byte) ([]byte, error) {
+	if len(raw) > 0 {
+		var req streamChunkInterceptRPC
+		if err := json.Unmarshal(raw, &req); err == nil {
+			globalPayloadManager.recordStreamChunk(req.RequestID, req.Body)
+		}
+	}
+	return okEnvelope(map[string]any{})
 }
 
 // ---- registration metadata -------------------------------------------------
@@ -128,8 +187,11 @@ type configFieldInfo struct {
 }
 
 type capabilitiesInfo struct {
-	UsagePlugin   bool `json:"usage_plugin"`
-	ManagementAPI bool `json:"management_api"`
+	UsagePlugin         bool `json:"usage_plugin"`
+	ManagementAPI       bool `json:"management_api"`
+	RequestInterceptor  bool `json:"request_interceptor"`
+	ResponseInterceptor bool `json:"response_interceptor"`
+	StreamInterceptor   bool `json:"response_stream_interceptor"`
 }
 
 func registerResponse() registerResponsePayload {
@@ -145,7 +207,13 @@ func registerResponse() registerResponsePayload {
 				{Name: "retention_days", Type: "integer", Description: "Delete usage records older than this many days. 0 disables cleanup."},
 			},
 		},
-		Capabilities: capabilitiesInfo{UsagePlugin: true, ManagementAPI: true},
+		Capabilities: capabilitiesInfo{
+			UsagePlugin:         true,
+			ManagementAPI:       true,
+			RequestInterceptor:  true,
+			ResponseInterceptor: true,
+			StreamInterceptor:   true,
+		},
 	}
 }
 
@@ -177,15 +245,18 @@ func managementRegistration() managementRegistrationPayload {
 			{Method: "GET", Path: managementSummaryPath, Description: "Dashboard aggregate: totals, per-hour, per-model, per-alias, per-provider, per-api-key."},
 			{Method: "GET", Path: managementRequestsPath, Description: "Paginated request-level usage listing with filters."},
 			{Method: "GET", Path: managementErrorLogPath, Description: "CPA request-error log excerpt for a failed request (ts + status match)."},
+			{Method: "GET", Path: managementPayloadPath, Description: "Captured chat prompt/response preview for requests."},
+			{Method: "GET", Path: managementProvidersPath, Description: "Known providers and models discovery for testing tools."},
+			{Method: "POST", Path: managementProxyFetchPath, Description: "Internal HTTP proxy for upstream models fetch and reasoning probes."},
 			{Method: "DELETE", Path: managementUsagePath, Description: "Delete persisted usage records by id."},
 		},
 		Resources: []resourceRouteInfo{
 			{
 				// Relative to /v0/resource/plugins/usage-statistics/. The host
-				// shows "Usage Statistics" in the management Plugins menu.
+				// shows "Tools" in the management Plugins menu.
 				Path:        "/dashboard",
-				Menu:        "Usage Statistics",
-				Description: "Usage dashboard: 4 views (Obsidian/Linear design).",
+				Menu:        "Tools",
+				Description: "CPA Tools Hub: Reasoning Effort Inspector & diagnostics.",
 			},
 			{
 				Path:        "/dashboard2",
@@ -370,6 +441,21 @@ func handleManagement(request []byte) ([]byte, error) {
 			return okEnvelope(jsonManagementResponse(405, map[string]string{"error": "method not allowed"}))
 		}
 		return errorLogGetWithFile(req)
+	case path == strings.TrimRight(managementPayloadPath, "/"):
+		if !strings.EqualFold(strings.TrimSpace(req.Method), "GET") {
+			return okEnvelope(jsonManagementResponse(405, map[string]string{"error": "method not allowed"}))
+		}
+		return chatPayloadGet(req)
+	case path == strings.TrimRight(managementProvidersPath, "/"):
+		if !strings.EqualFold(strings.TrimSpace(req.Method), "GET") {
+			return okEnvelope(jsonManagementResponse(405, map[string]string{"error": "method not allowed"}))
+		}
+		return providersGet(req)
+	case path == strings.TrimRight(managementProxyFetchPath, "/"):
+		if !strings.EqualFold(strings.TrimSpace(req.Method), "POST") {
+			return okEnvelope(jsonManagementResponse(405, map[string]string{"error": "method not allowed"}))
+		}
+		return proxyFetchHandler(req)
 	default:
 		return okEnvelope(jsonManagementResponse(404, map[string]string{"error": "not found"}))
 	}

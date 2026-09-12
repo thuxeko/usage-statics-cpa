@@ -13,15 +13,27 @@ Plugin nội tuyến (Go C-ABI Shared Object `.so`) dành cho **CLIProxyAPI (CPA
 ├── routerstore.go        # Engine phân tích, aggregate SQL/In-memory cho toàn bộ metrics từ Router DB
 ├── store.go              # SQLite Store nội bộ (fallback khi không dùng model-router)
 ├── types.go              # Định nghĩa struct dữ liệu: UsageSummary, HourStat, DistributionBucket, RequestDetail...
+├── payload_capture.go    # Interceptor bắt prompt/response chat, ghi vào bảng phụ chat_previews
 ├── config.go             # Cấu hình plugin qua config.yaml
 ├── abi_cgo.go            # Cgo memory safety & C-ABI wrapper
 ├── dashboard2.html       # Giao diện Analytics Dashboard chính (nhúng trực tiếp vào binary qua go:embed)
-├── dashboard.html        # Giao diện dashboard v1 (lưu trữ phục vụ chuyển đổi mục đích sau này)
+├── dashboard.html        # Giao diện Tools Hub — Reasoning Effort Inspector (nhúng qua go:embed)
+├── providers_active_test.go  # Go test: /providers chỉ trả về provider đang active & có key
 ├── test_e2e.py           # E2E Test Suite kiểm thử toàn bộ ABI và lifecycle của Plugin
 ├── test_router_source.py # Test Suite kiểm tra đọc & tính toán dữ liệu từ model-router.db
+├── test_payload_capture.py   # Test Suite cho interceptor lưu prompt/response preview
 ├── test_dashboard_auth.js# Test giải mã token/auth CPAMC tự động từ localStorage/sessionStorage
 └── test_error_decode.js  # Test parser & HTML entity decoder cho log lỗi từ CPA
 ```
+
+### Hai Resource Menu hiển thị trong CPA Manager Plus
+
+| Menu (sidebar) | Path | Nội dung |
+|---|---|---|
+| **Tools** | `/v0/resource/plugins/usage-statistics/dashboard` | CPA Tools Hub: Reasoning Effort Inspector |
+| **Analytics Dashboard** | `/v0/resource/plugins/usage-statistics/dashboard2` | Analytics Dashboard v2 (5 tab phân tích) |
+
+> Menu `Tools` trước đây là `dashboard v1` (Usage Statistics) — đã được đổi mục đích thành trung tâm công cụ, sẽ tiếp tục bổ sung thêm tool mới.
 
 ---
 
@@ -88,6 +100,38 @@ Dashboard được thiết kế theo phong cách tối giản, hiện đại (Li
 
 ---
 
+## 🧰 Mô tả Tab Tools — CPA Tools Hub
+
+Tab `Tools` là trung tâm công cụ chẩn đoán, đồng bộ phong cách Slate Theme tối giản với Dashboard 2 (không icon, không emoji, không màu mè). Công cụ đầu tiên là **Reasoning Effort Inspector**.
+
+### Reasoning Effort Inspector
+
+Kiểm tra một model LLM thực sự hỗ trợ những mức `reasoning_effort` nào (không có API chuẩn để hỏi trực tiếp, phải probe thực tế).
+
+**Luồng hoạt động:**
+
+1. **Chọn nguồn Provider** — 2 chế độ (mode pill):
+   - **Chọn Provider từ CPA**: Đọc `openai-compatibility` trong `config.yaml` của CPA, **chỉ liệt kê provider đang active** (bỏ qua provider có `disabled: true` hoặc không có API key nào). Chọn provider nào sẽ **tự động điền Base URL + API Key**. Nếu provider có nhiều key, hiện thêm dropdown chọn key.
+   - **Nhập Base URL tùy chỉnh**: Dùng cho provider thứ 3 chưa khai báo trong CPA.
+
+2. **Tải danh sách Model thủ công** — người dùng chủ động bấm nút *Tải danh sách Model*. Request đi qua endpoint nội bộ `/proxy-fetch` của plugin (backend gọi upstream) để tránh CORS, **không** lấy danh sách model sẵn có của CPA. Cũng có thể gõ tay tên model bất kỳ (model mới/thử nghiệm).
+
+3. **Probe các mức thinking** — Gửi lần lượt request probe với `none`, `low`, `medium`, `high`, `xhigh`, đo **reasoning tokens**, **độ trễ** và **trạng thái** từng mức.
+
+4. **Bảng kết quả** — Mức effort / Trạng thái (`Hỗ trợ (Thinking Active)`, `Chấp nhận (No Thinking)`, `Lỗi N`) / Reasoning Tokens / Độ trễ / Ghi chú.
+
+5. **Khuyến nghị cấu hình Model-Router** — Sinh sẵn đoạn YAML gợi ý `thinking-levels` + `default-thinking` để copy vào cấu hình router.
+
+> ⚠️ **Lưu ý về xác thực**: probe đi thẳng tới upstream bằng API Key của provider (qua backend proxy), **không** đi qua cổng client `/v1/chat/completions` của CPA — nên không cần Client API Key của CPA, cũng không bị CPA ghi đè `reasoning_effort`.
+
+### Lưu ý kỹ thuật khi phát triển Tools Hub
+
+- **Giải mã Management Key**: CPAMC lưu key trong `localStorage` dưới dạng mã hóa `enc::v1::<base64>`; phải decode bằng XOR với `SALT = "cli-proxy-api-webui::secure-storage"` kèm `host` + `userAgent`, rồi bóc JSON `state.managementKey`. `dashboard.html` dùng đúng thuật toán của `dashboard2.html` (`decodeObfuscated` + `extractKeyFromJson`), quét cả `localStorage` và `sessionStorage`.
+- **Tránh CORS**: mọi request ra upstream (fetch models, probe chat) đều phải đi qua `POST /v0/management/plugins/usage-statistics/proxy-fetch` để backend thực hiện.
+- **Đọc `config.yaml`**: hàm `findCPAConfigFile()` duyệt danh sách đường dẫn theo thứ tự ưu tiên và **bỏ qua file rỗng 0 byte** (từng gây lỗi đọc nhầm file rác).
+
+---
+
 ## 🛠️ Hướng dẫn Build & Cài đặt
 
 ### 1. Biên dịch Plugin (.so)
@@ -109,5 +153,10 @@ docker compose restart cli-proxy-api
 node test_dashboard_auth.js
 node test_error_decode.js
 python3 test_router_source.py
+python3 test_payload_capture.py
 python3 test_e2e.py
+
+# Go test (yêu cầu mount config.yaml thật để kiểm chứng lọc provider)
+docker run --rm -v $(pwd):/src -v /path/to/cliproxy/config.yaml:/src/config.yaml:ro \
+  -w /src golang:1.26 bash -c "CGO_ENABLED=1 go test -run TestProvidersActiveOnly -v ./..."
 ```

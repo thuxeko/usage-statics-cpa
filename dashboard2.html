@@ -418,6 +418,29 @@ svg.chart {
   font-size: 12px;
   margin-bottom: 6px;
 }
+.chat-preview-box {
+  max-height: 160px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  font-family: var(--font);
+}
+.chat-preview-box::-webkit-scrollbar {
+  width: 6px;
+}
+.chat-preview-box::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
 .detail-row {
   display: flex;
   gap: 8px;
@@ -489,10 +512,10 @@ svg.chart {
     <div class="filter-row">
       <!-- Time Presets -->
       <div class="time-pills">
-        <button class="pill-btn" data-time="1h" onclick="setTime('1h')">1 giờ</button>
+        <button class="pill-btn active" data-time="1h" onclick="setTime('1h')">1 giờ</button>
         <button class="pill-btn" data-time="6h" onclick="setTime('6h')">6 giờ</button>
         <button class="pill-btn" data-time="24h" onclick="setTime('24h')">24 giờ</button>
-        <button class="pill-btn active" data-time="7d" onclick="setTime('7d')">7 ngày</button>
+        <button class="pill-btn" data-time="7d" onclick="setTime('7d')">7 ngày</button>
         <button class="pill-btn" data-time="all" onclick="setTime('all')">Tất cả</button>
       </div>
     </div>
@@ -1365,7 +1388,7 @@ function esc(str) {
 
 // ---- state & filter management ---------------------------------------------
 var state = {
-  timeRange: "7d",
+  timeRange: "1h",
   tab: "overview",
   reqOffset: 0,
   reqLimit: 15,
@@ -1714,12 +1737,44 @@ function showDetail(r) {
   if (r.failed) {
     html += '<div id="drawer-error-log" style="margin-top:10px"><span class="badge badge-warn">Đang tìm error log…</span></div>';
   }
+  html += '<div id="drawer-chat-payload" style="margin-top:10px"><span class="badge" style="background:var(--bg-subtle)">Đang tải nội dung preview…</span></div>';
   body.innerHTML = html;
   modal.style.display = "flex";
+
+  loadChatPayloadForDetail(r);
 
   if (r.failed) {
     loadErrorLogForDetail(r);
   }
+}
+
+function loadChatPayloadForDetail(r) {
+  var holder = document.getElementById("drawer-chat-payload");
+  if (!holder) return;
+  var reqID = r.id || "";
+  var ts = r.timestamp || "";
+  var url = "/payload?id=" + encodeURIComponent(reqID) + "&ts=" + encodeURIComponent(ts);
+
+  api(url).then(function(res) {
+    if (!res || !res.found || (!res.prompt_preview && !res.response_preview)) {
+      holder.innerHTML = '<div class="note-callout" style="font-size:11px;color:var(--text-muted)">Không có bản lưu nội dung chat (payload preview) cho request này.</div>';
+      return;
+    }
+    var html = '<div class="error-cause-card" style="border-left:3px solid var(--accent);background:var(--bg-subtle)">' +
+      '<div class="error-cause-title" style="color:var(--accent)">💬 Nội dung Chat (Preview)</div>';
+    if (res.prompt_preview) {
+      html += '<div style="margin-top:6px;margin-bottom:4px;font-weight:600;font-size:12px;color:var(--text)">👤 Câu hỏi (Prompt):</div>' +
+        '<div class="chat-preview-box">' + esc(res.prompt_preview) + '</div>';
+    }
+    if (res.response_preview) {
+      html += '<div style="margin-top:8px;margin-bottom:4px;font-weight:600;font-size:12px;color:var(--ok)">🤖 Câu trả lời (Response):</div>' +
+        '<div class="chat-preview-box">' + esc(res.response_preview) + '</div>';
+    }
+    html += '</div>';
+    holder.innerHTML = html;
+  }).catch(function() {
+    holder.innerHTML = '';
+  });
 }
 
 function closeDetail() {

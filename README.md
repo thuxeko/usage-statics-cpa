@@ -17,6 +17,9 @@ Plugin nội tuyến (C-ABI Shared Object `.so`) dành cho **CLIProxyAPI (CPA)**
   3. **Hiệu năng & Độ trễ**: Phân vị P50, P75, P90, P95, P99, Max, TTFT, biểu đồ Histogram và Scatter Plot (Latency vs TTFT).
   4. **Token & Cache**: Thống kê Input/Output/Reasoning Tokens, Cache Hit Rate %, phân bố token theo model và reasoning effort.
   5. **Tra cứu Requests**: Phân trang theo số lượng dòng (15, 25, 50, 100 dòng), lọc nhanh Thành công/Thất bại, sắp xếp mới nhất, Drawer xem chi tiết request và log lỗi.
+- 🧰 **Tools Hub — Reasoning Effort Inspector**: Menu **Tools** (trước đây là dashboard v1) là trung tâm công cụ chẩn đoán. Công cụ đầu tiên kiểm tra một model hỗ trợ những mức `reasoning_effort` nào bằng cách probe thực tế `none` / `low` / `medium` / `high` / `xhigh` và đo reasoning tokens + độ trễ từng mức. Chọn Provider trực tiếp từ CPA sẽ tự động điền Base URL + API Key (nhiều key thì có dropdown chọn), hoặc nhập Base URL tùy chỉnh.
+- 💬 **Chat Preview Capture**: Tự động lưu prompt/response (tối đa 1.000 ký tự mỗi phần) vào bảng phụ `chat_previews` trong `usage.db` cho mọi request, phục vụ tra cứu nội dung ngay trên dashboard.
+- 🔐 **Không lộ bí mật**: API Key chỉ được trả về cho client đã xác thực Management Key; không ghi log hay hiển thị key dạng thô.
 
 ---
 
@@ -64,10 +67,14 @@ docker compose restart cli-proxy-api
 ## 🚀 Truy cập Dashboard
 
 Sau khi cài đặt thành công, bro có thể truy cập dashboard theo 2 cách:
-1. **Qua giao diện CPA Manager Plus**: Mở mục **Plugins** trên menu điều hướng → Chọn **Analytics Dashboard**.
+1. **Qua giao diện CPA Manager Plus**: Mở mục **Plugins** trên menu điều hướng → Chọn **Tools** hoặc **Analytics Dashboard**.
 2. **Truy cập trực tiếp qua đường dẫn**:
    ```text
+   # Analytics Dashboard (5 tab phân tích)
    http://<cpa-host>:<cpa-port>/v0/resource/plugins/usage-statistics/dashboard2
+
+   # Tools Hub (Reasoning Effort Inspector)
+   http://<cpa-host>:<cpa-port>/v0/resource/plugins/usage-statistics/dashboard
    ```
 
 ---
@@ -81,9 +88,13 @@ Tất cả các API quản trị đều yêu cầu xác thực Management Key c�
 | `GET` | `/v0/management/plugins/usage-statistics/usage/summary` | Trả về dữ liệu thống kê tổng hợp (KPI, phân vị, biểu đồ, bảng model/provider). |
 | `GET` | `/v0/management/plugins/usage-statistics/usage/requests` | Danh sách chi tiết request có phân trang và lọc (limit, offset, result, start, end). |
 | `GET` | `/v0/management/plugins/usage-statistics/error-log` | Tìm và đọc log lỗi CPA chi tiết theo timestamp và mã trạng thái. |
+| `GET` | `/v0/management/plugins/usage-statistics/payload` | Lấy nội dung chat preview (prompt/response) đã lưu cho một request. |
+| `GET` | `/v0/management/plugins/usage-statistics/providers` | Danh sách Provider **đang active** trong CPA kèm Base URL & API Key (dùng cho Tools Hub). |
+| `POST` | `/v0/management/plugins/usage-statistics/proxy-fetch` | Proxy request ra upstream từ backend, tránh CORS (fetch models / probe reasoning). |
 | `GET` | `/v0/management/plugins/usage-statistics/usage` | Lấy danh sách bản ghi thô (tương thích ngược). |
 | `DELETE` | `/v0/management/plugins/usage-statistics/usage` | Xóa các bản ghi usage theo ID. |
 | `GET` | `/v0/resource/plugins/usage-statistics/dashboard2` | Giao diện web Analytics Dashboard v2. |
+| `GET` | `/v0/resource/plugins/usage-statistics/dashboard` | Giao diện web Tools Hub (Reasoning Effort Inspector). |
 
 ---
 
@@ -101,8 +112,15 @@ node test_error_decode.js
 # Kiểm tra đọc và tổng hợp dữ liệu từ model-router.db
 python3 test_router_source.py
 
+# Kiểm tra interceptor lưu prompt/response preview
+python3 test_payload_capture.py
+
 # Kiểm tra toàn bộ ABI C-shared và lifecycle của Plugin
 python3 test_e2e.py
+
+# Go test: /providers chỉ trả về provider đang active & có key
+docker run --rm -v $(pwd):/src -w /src golang:1.26 bash -c \
+  "CGO_ENABLED=1 go test -run TestProvidersActiveOnly -v ./..."
 ```
 
 ---

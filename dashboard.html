@@ -3,987 +3,523 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>LLM Gateway Analytics · CPA Usage Statistics</title>
+<title>CPA Tools Hub</title>
 <style>
-/* ==========================================================================
-   Obsidian Slate / Linear Design System (Zero External Assets)
-   ========================================================================== */
 :root {
-  --bg: #080b11;
-  --bg-card: #0f141f;
-  --bg-card-hover: #151b2a;
-  --bg-subtle: #141926;
-  --bg-glass: rgba(15, 20, 31, 0.85);
-  --border: rgba(255, 255, 255, 0.08);
-  --border-focus: rgba(99, 102, 241, 0.5);
+  --bg: #090d16;
+  --bg-card: #0f172a;
+  --bg-card-hover: #172033;
+  --border: #1e293b;
+  --border-light: #334155;
   --text: #f1f5f9;
-  --text-dim: #94a3b8;
-  --text-muted: #64748b;
-  --accent: #6366f1;
-  --accent-glow: rgba(99, 102, 241, 0.15);
-  --ok: #10b981;
-  --ok-bg: rgba(16, 185, 129, 0.12);
-  --warn: #f59e0b;
-  --warn-bg: rgba(245, 158, 11, 0.12);
-  --bad: #f43f5e;
-  --bad-bg: rgba(244, 63, 94, 0.12);
-  --cyan: #06b6d4;
-  --purple: #a855f7;
-  --radius: 12px;
-  --radius-sm: 8px;
-  --shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-  --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+  --text-muted: #94a3b8;
+  --text-dim: #64748b;
+  --accent: #3b82f6;
+  --accent-light: #60a5fa;
+  --accent-bg: rgba(59, 130, 246, 0.08);
+  --success: #10b981;
+  --success-bg: rgba(16, 185, 129, 0.1);
+  --warning: #f59e0b;
+  --warning-bg: rgba(245, 158, 11, 0.1);
+  --danger: #ef4444;
+  --danger-bg: rgba(239, 68, 68, 0.1);
+  --radius: 8px;
+  --radius-sm: 4px;
+  --radius-lg: 12px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
 }
+
 [data-theme="light"] {
   --bg: #f8fafc;
   --bg-card: #ffffff;
   --bg-card-hover: #f1f5f9;
-  --bg-subtle: #f1f5f9;
-  --bg-glass: rgba(255, 255, 255, 0.9);
-  --border: rgba(0, 0, 0, 0.08);
-  --border-focus: rgba(99, 102, 241, 0.4);
+  --border: #e2e8f0;
+  --border-light: #cbd5e1;
   --text: #0f172a;
-  --text-dim: #475569;
-  --text-muted: #94a3b8;
-  --accent: #4f46e5;
-  --accent-glow: rgba(79, 70, 229, 0.08);
-  --ok: #059669;
-  --ok-bg: rgba(5, 150, 105, 0.1);
-  --warn: #d97706;
-  --warn-bg: rgba(217, 119, 6, 0.1);
-  --bad: #e11d48;
-  --bad-bg: rgba(225, 29, 72, 0.1);
-  --cyan: #0284c7;
-  --purple: #9333ea;
-  --shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+  --text-muted: #475569;
+  --text-dim: #94a3b8;
+  --accent: #2563eb;
+  --accent-light: #3b82f6;
+  --accent-bg: rgba(37, 99, 235, 0.06);
+  --success: #059669;
+  --success-bg: rgba(5, 150, 105, 0.08);
+  --warning: #d97706;
+  --warning-bg: rgba(217, 119, 6, 0.08);
+  --danger: #dc2626;
+  --danger-bg: rgba(220, 38, 38, 0.08);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, Helvetica, sans-serif;
   background: var(--bg);
   color: var(--text);
+  font-family: var(--font);
+  font-size: 13px;
   line-height: 1.5;
-  padding-bottom: 60px;
+  padding: 20px;
   -webkit-font-smoothing: antialiased;
 }
 
-/* ---- Layout & Container ---- */
 .container {
-  max-width: 1360px;
+  max-width: 960px;
   margin: 0 auto;
-  padding: 0 16px;
 }
 
-/* Header & Clearance for CPAMC floating action capsule */
 .app-header {
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  align-items: center;
-  padding: 16px 0;
+  margin-bottom: 20px;
+  padding-bottom: 14px;
   border-bottom: 1px solid var(--border);
-  margin-bottom: 16px;
 }
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.brand-icon {
-  width: 34px;
-  height: 34px;
-  border-radius: var(--radius-sm);
-  background: linear-gradient(135deg, var(--accent), var(--purple));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-weight: 700;
-  font-size: 16px;
-  box-shadow: 0 2px 10px var(--accent-glow);
-}
+
 .brand-title {
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 700;
-  letter-spacing: -0.3px;
+  letter-spacing: -0.02em;
+  color: var(--text);
 }
+
 .brand-sub {
   font-size: 12px;
   color: var(--text-dim);
-}
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  margin-top: 2px;
 }
 
-/* Badges */
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 3px 9px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--bg-subtle);
-  color: var(--text-dim);
-  white-space: nowrap;
-}
-.badge-ok { border-color: var(--ok); color: var(--ok); background: var(--ok-bg); }
-.badge-bad { border-color: var(--bad); color: var(--bad); background: var(--bad-bg); }
-.badge-warn { border-color: var(--warn); color: var(--warn); background: var(--warn-bg); }
-.badge-accent { border-color: var(--accent); color: var(--accent); background: var(--accent-glow); }
-
-/* ---- Sticky Command & Filter Bar ---- */
-.filter-bar {
-  position: sticky;
-  top: 0;
-  z-index: 50;
-  background: var(--bg-glass);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 10px 14px;
-  margin-bottom: 20px;
-  box-shadow: var(--shadow);
-}
-.filter-row {
+.nav-tabs {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
   gap: 8px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
 }
-.time-pills {
-  display: flex;
-  background: var(--bg-subtle);
-  padding: 2px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-}
-.pill-btn {
+
+.tab-btn {
   background: transparent;
-  border: none;
-  color: var(--text-dim);
-  font-size: 12px;
-  font-weight: 600;
-  padding: 5px 12px;
-  border-radius: 6px;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  padding: 6px 14px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
   transition: all 0.15s ease;
 }
-.pill-btn:hover { color: var(--text); }
-.pill-btn.active {
-  background: var(--bg-card);
-  color: var(--text);
-  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
-}
-.filter-select {
-  background: var(--bg-card);
-  color: var(--text);
-  border: 1px solid var(--border);
-  padding: 5px 10px;
-  border-radius: var(--radius-sm);
-  font-size: 12px;
-  outline: none;
-  cursor: pointer;
-  min-width: 110px;
-}
-.filter-select:focus { border-color: var(--border-focus); }
-.btn-icon {
-  background: var(--bg-subtle);
-  border: 1px solid var(--border);
-  color: var(--text-dim);
-  padding: 5px 10px;
-  border-radius: var(--radius-sm);
-  font-size: 12px;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  transition: all 0.15s;
-}
-.btn-icon:hover { color: var(--text); border-color: var(--text-muted); }
 
-/* ---- Tabs Navigation ---- */
-.nav-tabs {
-  display: flex;
-  gap: 6px;
-  overflow-x: auto;
-  padding-bottom: 2px;
-  margin-bottom: 20px;
-  border-bottom: 1px solid var(--border);
-  scrollbar-width: none;
-}
-.nav-tabs::-webkit-scrollbar { display: none; }
-.tab-btn {
-  background: transparent;
-  border: none;
-  border-bottom: 2px solid transparent;
-  color: var(--text-dim);
-  padding: 10px 14px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  transition: all 0.2s;
-}
-.tab-btn:hover { color: var(--text); }
 .tab-btn.active {
-  color: var(--accent);
-  border-bottom-color: var(--accent);
-}
-
-/* ---- KPI Grid & Stat Cards ---- */
-.kpi-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 14px;
-  margin-bottom: 20px;
-}
-.stat-card {
   background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px;
-  position: relative;
-  overflow: hidden;
-  transition: transform 0.15s, border-color 0.15s;
-}
-.stat-card:hover {
-  transform: translateY(-1px);
-  border-color: rgba(255,255,255,0.15);
-}
-.stat-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-dim);
-  margin-bottom: 8px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.stat-value {
-  font-size: 26px;
-  font-weight: 700;
-  font-family: var(--mono);
-  letter-spacing: -0.5px;
   color: var(--text);
-  line-height: 1.1;
-  margin-bottom: 6px;
-}
-.stat-sub {
-  font-size: 11px;
-  color: var(--text-muted);
-}
-.stat-glow {
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 60px;
-  height: 60px;
-  background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
-  pointer-events: none;
+  border-color: var(--border);
 }
 
-/* ---- Section Cards & Charts ---- */
-.section-grid {
-  display: grid;
-  grid-template-columns: repeat(12, 1fr);
-  gap: 16px;
-  margin-bottom: 20px;
+.tab-btn:hover:not(.active) {
+  background: var(--bg-card-hover);
+  color: var(--text);
 }
-.col-12 { grid-column: span 12; }
-.col-8 { grid-column: span 8; }
-.col-7 { grid-column: span 7; }
-.col-6 { grid-column: span 6; }
-.col-5 { grid-column: span 5; }
-.col-4 { grid-column: span 4; }
 
 .panel {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 18px;
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.panel-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.panel-sub {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 16px;
+}
+
+.mode-pills {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.mode-pill {
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.mode-pill.active {
+  background: var(--accent-bg);
+  border-color: var(--accent);
+  color: var(--accent-light);
+  font-weight: 600;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+
+.form-group {
   display: flex;
   flex-direction: column;
 }
-.panel-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 14px;
-}
-.panel-title {
-  font-size: 14px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.panel-desc {
+
+.form-label {
   font-size: 12px;
+  font-weight: 500;
   color: var(--text-muted);
+  margin-bottom: 6px;
 }
 
-/* ---- Clean Data Tables ---- */
-.table-wrap {
+.form-input, .form-select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 13px;
+  padding: 8px 12px;
+  outline: none;
+  transition: border-color 0.15s ease;
   width: 100%;
-  overflow-x: auto;
-  border-radius: var(--radius-sm);
 }
-table.clean-table {
+
+.form-input:focus, .form-select:focus {
+  border-color: var(--accent);
+}
+
+.form-input[readonly] {
+  opacity: 0.85;
+  background: var(--bg-card-hover);
+}
+
+.btn-group {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: #ffffff;
+  border: none;
+  border-radius: var(--radius);
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.btn-primary:hover { opacity: 0.9; }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn-secondary {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-secondary:hover {
+  background: var(--bg-card-hover);
+  color: var(--text);
+  border-color: var(--border-light);
+}
+
+.table-wrap {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow-x: auto;
+  margin-top: 14px;
+}
+
+.data-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 12px;
-  text-align: left;
 }
-table.clean-table th {
-  padding: 10px 12px;
-  background: var(--bg-subtle);
-  color: var(--text-dim);
+
+.data-table th {
+  background: var(--bg-card-hover);
+  color: var(--text-muted);
   font-weight: 600;
+  text-align: left;
+  padding: 10px 14px;
   border-bottom: 1px solid var(--border);
-  white-space: nowrap;
 }
-table.clean-table td {
-  padding: 10px 12px;
+
+.data-table td {
+  padding: 10px 14px;
   border-bottom: 1px solid var(--border);
   color: var(--text);
-  white-space: nowrap;
-}
-table.clean-table tr:hover td {
-  background: var(--bg-card-hover);
-}
-table.clean-table .num {
-  text-align: right;
-  font-family: var(--mono);
 }
 
-/* ---- Interactive SVG Chart Containers ---- */
-.chart-box {
-  width: 100%;
-  min-height: 220px;
-  position: relative;
-}
-svg.chart {
-  width: 100%;
-  height: 220px;
-  overflow: visible;
-}
-.chart-tooltip {
-  position: absolute;
-  pointer-events: none;
-  background: var(--bg-glass);
-  backdrop-filter: blur(8px);
-  border: 1px solid var(--border);
-  padding: 6px 10px;
-  border-radius: 6px;
+.data-table tr:last-child td { border-bottom: none; }
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
   font-size: 11px;
+  font-weight: 600;
   font-family: var(--mono);
-  box-shadow: var(--shadow);
-  display: none;
-  z-index: 100;
-  white-space: nowrap;
 }
 
-/* ---- Drawer / Modal for Request Detail & Error Cause ---- */
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(6px);
-  z-index: 1000;
-  display: none;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-}
-.modal-content {
-  background: var(--bg-card);
+.badge-success { background: var(--success-bg); color: var(--success); }
+.badge-danger { background: var(--danger-bg); color: var(--danger); }
+.badge-warning { background: var(--warning-bg); color: var(--warning); }
+.badge-neutral { background: var(--bg-card-hover); color: var(--text-muted); }
+
+.code-box {
+  background: var(--bg);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  max-width: 720px;
-  width: 100%;
-  max-height: 88vh;
-  overflow-y: auto;
-  padding: 22px;
-  box-shadow: 0 12px 40px rgba(0,0,0,0.6);
-}
-.error-cause-card {
-  background: var(--bg);
-  border: 1px solid var(--bad);
-  border-radius: var(--radius-sm);
   padding: 14px;
-  margin: 12px 0;
-}
-.error-cause-title {
-  color: var(--bad);
-  font-weight: 700;
-  font-size: 13px;
-  margin-bottom: 8px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.detail-row {
-  display: flex;
-  gap: 10px;
-  padding: 4px 0;
+  font-family: var(--mono);
   font-size: 12px;
-}
-.detail-k {
-  color: var(--text-dim);
-  width: 110px;
-  flex-shrink: 0;
-}
-.detail-v {
-  color: var(--text);
-  word-break: break-word;
-  overflow-wrap: break-word;
-  flex: 1;
+  color: var(--text-muted);
+  overflow-x: auto;
+  white-space: pre-wrap;
+  margin-top: 12px;
+  position: relative;
 }
 
-/* ---- Note callout ---- */
-.note-callout {
-  padding: 10px 14px;
+.copy-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
   border-radius: var(--radius-sm);
-  background: var(--bg-subtle);
-  border: 1px dashed var(--border);
-  font-size: 12px;
-  color: var(--text-dim);
-  margin-top: 10px;
+  padding: 4px 8px;
+  font-size: 11px;
+  cursor: pointer;
 }
+.copy-btn:hover { color: var(--text); border-color: var(--border-light); }
 
-/* ---- Responsive & Mobile Optimization ---- */
-@media (max-width: 960px) {
-  .col-8, .col-7, .col-6, .col-5, .col-4 { grid-column: span 12; }
-}
-@media (max-width: 640px) {
-  /* Clear CPAMC floating action capsule */
-  body { padding-top: 60px; }
-  .kpi-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
-  .stat-value { font-size: 20px; }
-  .filter-row { gap: 6px; }
-  .filter-select { min-width: 90px; }
+.log-box {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  max-height: 140px;
+  overflow-y: auto;
+  margin-top: 12px;
+  white-space: pre-wrap;
 }
 </style>
 </head>
 <body>
 
 <div class="container">
-  <!-- Header -->
   <header class="app-header">
-    <div class="brand">
-      <div class="brand-icon">⚡</div>
-      <div>
-        <div class="brand-title">LLM Gateway Analytics</div>
-        <div class="brand-sub">Hệ thống phân tích & giám sát tải gateway</div>
-      </div>
-    </div>
-    <div class="header-actions">
-      <span class="badge" id="srcBadge">nguồn: model-router.db ✓</span>
-      <button class="btn-icon" onclick="toggleTheme()" title="Đổi giao diện sáng/tối">🌓</button>
-      <button class="btn-icon" onclick="refreshData()" title="Làm mới">🔄</button>
+    <div>
+      <div class="brand-title">CPA Tools Hub</div>
+      <div class="brand-sub">Kiểm tra & chẩn đoán tính năng nâng cao của mô hình AI</div>
     </div>
   </header>
 
-  <!-- Global Filter Bar (Sticky Command Bar) -->
-  <div class="filter-bar">
-    <div class="filter-row">
-      <!-- Time selector -->
-      <div class="time-pills">
-        <button class="pill-btn" data-time="24h" onclick="setTime('24h')">24h</button>
-        <button class="pill-btn active" data-time="7d" onclick="setTime('7d')">7 ngày</button>
-        <button class="pill-btn" data-time="30d" onclick="setTime('30d')">30 ngày</button>
-        <button class="pill-btn" data-time="all" onclick="setTime('all')">Tất cả</button>
-      </div>
-
-      <!-- Filters -->
-      <select id="fltProvider" class="filter-select" onchange="applyFilters()">
-        <option value="">Provider: Tất cả</option>
-      </select>
-
-      <select id="fltAlias" class="filter-select" onchange="applyFilters()">
-        <option value="">Alias: Tất cả</option>
-      </select>
-
-      <select id="fltModel" class="filter-select" onchange="applyFilters()">
-        <option value="">Model: Tất cả</option>
-      </select>
-
-      <select id="fltAttr" class="filter-select" onchange="applyFilters()">
-        <option value="">Đường đi: Tất cả</option>
-        <option value="routed">Qua Router</option>
-        <option value="direct">Gọi thẳng (Direct)</option>
-        <option value="unattributed">Không rõ (Unattributed)</option>
-      </select>
-
-      <select id="fltKey" class="filter-select" onchange="applyFilters()">
-        <option value="">API Key: Tất cả</option>
-      </select>
-
-      <select id="fltResult" class="filter-select" onchange="applyFilters()">
-        <option value="">Kết quả: Tất cả</option>
-        <option value="success">Thành công</option>
-        <option value="failed">Chỉ lỗi</option>
-      </select>
-
-      <button class="btn-icon" onclick="resetFilters()" title="Xóa toàn bộ bộ lọc">✖ Reset</button>
-    </div>
-  </div>
-
-  <!-- Navigation Tabs (4 Views + Requests Log) -->
+  <!-- Navigation Tabs -->
   <div class="nav-tabs">
-    <button class="tab-btn active" data-tab="view1" onclick="switchTab('view1')">📋 View 1 · Nhận diện</button>
-    <button class="tab-btn" data-tab="view2" onclick="switchTab('view2')">⚙️ View 2 · Cấu hình</button>
-    <button class="tab-btn" data-tab="view3" onclick="switchTab('view3')">📊 View 3 · Hiệu năng</button>
-    <button class="tab-btn" data-tab="view4" onclick="switchTab('view4')">💰 View 4 · Token & Chi phí</button>
-    <button class="tab-btn" data-tab="requests" onclick="switchTab('requests')">🔍 Tra cứu Requests</button>
+    <button class="tab-btn active">Reasoning Effort Inspector</button>
   </div>
 
-  <!-- =========================================================================
-       VIEW 1: NHẬN DIỆN (Ai gọi, gọi gì, cơ cấu router)
-       ========================================================================= -->
-  <div id="tab-view1" class="tab-pane">
-    <div class="kpi-grid">
-      <div class="stat-card">
-        <div class="stat-glow"></div>
-        <div class="stat-label">Tổng số request</div>
-        <div class="stat-value" id="v1-calls">–</div>
-        <div class="stat-sub" id="v1-calls-sub">Trong khoảng thời gian</div>
+  <!-- Single Unified Panel: Setup & Inspection -->
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">Thiết lập Kết nối & Chọn Model</div>
+    </div>
+    <div class="panel-sub">
+      Chọn Provider trong CPA hoặc nhập Endpoint tùy chỉnh, tải danh sách Model và kiểm tra các mức thinking.
+    </div>
+
+    <div class="mode-pills">
+      <div id="modePillCPA" class="mode-pill active" onclick="setMode('cpa')">
+        <span>●</span> Chọn Provider từ CPA
       </div>
-      <div class="stat-card">
-        <div class="stat-glow"></div>
-        <div class="stat-label">Client Keys hoạt động</div>
-        <div class="stat-value" id="v1-keys">–</div>
-        <div class="stat-sub">Active API Keys</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-glow"></div>
-        <div class="stat-label">% Qua Router</div>
-        <div class="stat-value" id="v1-routed-pct">–</div>
-        <div class="stat-sub" id="v1-routed-sub">vs Gọi thẳng (Direct)</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-glow"></div>
-        <div class="stat-label">Models đang phục vụ</div>
-        <div class="stat-value" id="v1-models">–</div>
-        <div class="stat-sub">Active Provider Models</div>
+      <div id="modePillCustom" class="mode-pill" onclick="setMode('custom')">
+        <span>○</span> Nhập Base URL tùy chỉnh
       </div>
     </div>
 
-    <div class="section-grid">
-      <!-- Traffic Timeline Stacked Area -->
-      <div class="col-8 panel">
-        <div class="panel-header">
-          <div>
-            <div class="panel-title">Xu hướng Traffic theo giờ</div>
-            <div class="panel-desc">Phân bố đường đi (Routed vs Direct vs Unattributed)</div>
+    <!-- Mode 1: CPA Provider selection -->
+    <div id="sectionCPAProvider">
+      <div class="form-grid">
+        <div class="form-group" style="grid-column: span 2;">
+          <label class="form-label">Provider trong CPA:</label>
+          <select id="cpaProviderSelect" class="form-select" onchange="onCPAProviderChange()">
+            <option value="">-- Đang tải danh sách Provider từ CPA... --</option>
+          </select>
+        </div>
+        <div id="keySelectGroup" class="form-group" style="grid-column: span 2; display: none;">
+          <label class="form-label">Chọn API Key của Provider (tìm thấy nhiều khóa):</label>
+          <select id="cpaKeySelect" class="form-select" onchange="onCPAKeySelectChange()">
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Connection Inputs -->
+    <div style="margin-top: 14px;">
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Base URL (OpenAI-compatible):</label>
+          <input type="text" id="baseUrl" class="form-input" placeholder="https://api.example.com/v1">
+        </div>
+        <div class="form-group">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <label class="form-label" style="margin-bottom:0;">API Key của Provider:</label>
+            <button type="button" class="btn-secondary" style="padding: 1px 6px; font-size: 11px;" onclick="toggleKeyVisibility()">Hiện/Ẩn Key</button>
           </div>
-          <div style="display:flex;gap:8px">
-            <span class="badge" style="border-color:var(--accent);color:var(--accent)">● Routed</span>
-            <span class="badge" style="border-color:var(--cyan);color:var(--cyan)">● Direct</span>
-            <span class="badge" style="border-color:var(--text-muted);color:var(--text-muted)">● Unattributed</span>
+          <input type="password" id="apiKey" class="form-input" placeholder="sk-..." autocomplete="off">
+        </div>
+      </div>
+    </div>
+
+    <!-- Model Selection Section -->
+    <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);">
+      <div class="form-grid">
+        <div class="form-group">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <label class="form-label" style="margin-bottom:0;">Model từ Provider:</label>
+            <button id="btnFetchModels" type="button" class="btn-secondary" style="padding: 2px 8px; font-size: 11px;" onclick="fetchModelsFromEndpoint()">Tải danh sách Model</button>
           </div>
+          <select id="modelSelect" class="form-select">
+            <option value="">-- Bấm "Tải danh sách Model" để xem model --</option>
+          </select>
+          <span id="fetchStatus" style="font-size:11px;color:var(--text-dim);font-family:var(--mono);margin-top:4px;"></span>
         </div>
-        <div class="chart-box" id="v1-chart-trend"></div>
-      </div>
-
-      <!-- Top Client Keys -->
-      <div class="col-4 panel">
-        <div class="panel-header">
-          <div class="panel-title">Top Clients (API Key)</div>
-          <div class="panel-desc">Xếp theo số request</div>
-        </div>
-        <div class="chart-box" id="v1-chart-keys"></div>
-      </div>
-
-      <!-- Router Model -> Provider Model Structure -->
-      <div class="col-6 panel">
-        <div class="panel-header">
-          <div class="panel-title">Cơ cấu Router Alias → Model thật</div>
-          <div class="panel-desc">Tỷ trọng model thật gánh tải cho từng alias</div>
-        </div>
-        <div class="table-wrap">
-          <table class="clean-table" id="v1-tbl-mapping">
-            <thead>
-              <tr>
-                <th>Router Alias</th>
-                <th>Model thật</th>
-                <th class="num">Requests</th>
-                <th class="num">Tỷ trọng</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
+        <div class="form-group">
+          <label class="form-label">Hoặc nhập tên Model thủ công:</label>
+          <input type="text" id="customModel" class="form-input" placeholder="deepseek-v4-flash, qwen3.8-flash...">
         </div>
       </div>
 
-      <!-- Provider Breakdown Table -->
-      <div class="col-6 panel">
-        <div class="panel-header">
-          <div class="panel-title">Phân bổ theo Provider</div>
-          <div class="panel-desc">Chi tiết tải từng nhà cung cấp</div>
-        </div>
-        <div class="table-wrap">
-          <table class="clean-table" id="v1-tbl-providers">
-            <thead>
-              <tr>
-                <th>Provider</th>
-                <th class="num">Requests</th>
-                <th class="num">% Tổng</th>
-                <th>Model chủ lực</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
+      <div class="btn-group" style="margin-top: 16px;">
+        <button id="btnInspect" class="btn-primary" onclick="startInspection()">Bắt đầu kiểm tra Reasoning Efforts</button>
       </div>
+
+      <div id="statusLog" class="log-box" style="display:none;"></div>
     </div>
   </div>
 
-  <!-- =========================================================================
-       VIEW 2: CẤU HÌNH & VẬN HÀNH (Reasoning, Executor, Service Tier)
-       ========================================================================= -->
-  <div id="tab-view2" class="tab-pane" style="display:none">
-    <div class="kpi-grid">
-      <div class="stat-card">
-        <div class="stat-glow"></div>
-        <div class="stat-label">% Có Reasoning Effort</div>
-        <div class="stat-value" id="v2-effort-pct">–</div>
-        <div class="stat-sub" id="v2-effort-sub">Request có cấu hình suy nghĩ</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-glow"></div>
-        <div class="stat-label">Service Tier = Auto</div>
-        <div class="stat-value" id="v2-tier-pct">99.5%</div>
-        <div class="stat-sub">Hạng phục vụ tiêu chuẩn</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-glow"></div>
-        <div class="stat-label">Executor chiếm ưu thế</div>
-        <div class="stat-value" id="v2-executor-mode" style="font-size:18px">–</div>
-        <div class="stat-sub" id="v2-executor-sub">Động cơ chạy chính</div>
-      </div>
+  <!-- Panel 3: Results -->
+  <div id="resultPanel" class="panel" style="display:none;">
+    <div class="panel-header">
+      <div class="panel-title">3. Kết quả phân tích Reasoning Efforts</div>
+    </div>
+    <div id="resultModelInfo" style="font-size:12px;margin-bottom:8px;color:var(--text-dim)"></div>
+
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Mức Effort</th>
+            <th>Trạng thái</th>
+            <th>Reasoning Tokens</th>
+            <th>Độ trễ</th>
+            <th>Ghi chú / Phản hồi</th>
+          </tr>
+        </thead>
+        <tbody id="resultTbody">
+        </tbody>
+      </table>
     </div>
 
-    <div class="section-grid">
-      <!-- Reasoning Effort Distribution -->
-      <div class="col-6 panel">
-        <div class="panel-header">
-          <div class="panel-title">Phân bố Mức độ Suy nghĩ (Reasoning Effort)</div>
-          <div class="panel-desc">Tỷ trọng: high / medium / low / max / minimal / none</div>
-        </div>
-        <div class="chart-box" id="v2-chart-effort"></div>
-      </div>
-
-      <!-- Effort Trend Over Time -->
-      <div class="col-6 panel">
-        <div class="panel-header">
-          <div class="panel-title">Xu hướng Request Effort cao theo thời gian</div>
-          <div class="panel-desc">Số request high/max effort theo từng giờ</div>
-        </div>
-        <div class="chart-box" id="v2-chart-effort-trend"></div>
-      </div>
-
-      <!-- Executor Breakdown -->
-      <div class="col-6 panel">
-        <div class="panel-header">
-          <div class="panel-title">Phân bổ theo Executor Engine</div>
-          <div class="panel-desc">OpenAICompat, Antigravity, OpenAI, Claude</div>
-        </div>
-        <div class="table-wrap">
-          <table class="clean-table" id="v2-tbl-executors">
-            <thead>
-              <tr>
-                <th>Executor Type</th>
-                <th class="num">Requests</th>
-                <th class="num">Lỗi</th>
-                <th class="num">Avg TTFT</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- Alias x Effort Cross-tab -->
-      <div class="col-6 panel">
-        <div class="panel-header">
-          <div class="panel-title">Ma trận Router Alias & Reasoning</div>
-          <div class="panel-desc">Alias nào thường được set mức reasoning nào</div>
-        </div>
-        <div class="table-wrap">
-          <table class="clean-table" id="v2-tbl-effort-alias">
-            <thead>
-              <tr>
-                <th>Mức Effort</th>
-                <th class="num">Requests</th>
-                <th class="num">Reasoning Tokens</th>
-                <th class="num">p50 Latency</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
+    <!-- Recommendation Box -->
+    <div id="recommendationBox" style="margin-top: 16px; display: none;">
+      <div class="panel-title" style="margin-bottom:6px;">Khuyến nghị Cấu hình Model-Router</div>
+      <div class="panel-sub">Copy đoạn cấu hình dưới đây để thêm vào cấu hình router của CPA:</div>
+      <div class="code-box">
+        <button class="copy-btn" onclick="copyConfig()">Sao chép</button>
+        <pre id="yamlConfigCode" style="margin:0;font-family:inherit;"></pre>
       </div>
     </div>
-    <div class="note-callout">
-      ℹ️ <strong>Ghi chú vận hành:</strong> <code>generate: True 100%</code> (toàn bộ request sinh text) và <code>source</code> khớp với provider phục vụ.
-    </div>
-  </div>
-
-  <!-- =========================================================================
-       VIEW 3: HIỆU NĂNG & ĐỘ TIN CẬY (SRE, Latency, Lỗi)
-       ========================================================================= -->
-  <div id="tab-view3" class="tab-pane" style="display:none">
-    <div class="kpi-grid">
-      <div class="stat-card">
-        <div class="stat-glow"></div>
-        <div class="stat-label">Tỷ lệ Lỗi Tổng (Error Rate)</div>
-        <div class="stat-value" id="v3-err-rate">–</div>
-        <div class="stat-sub" id="v3-err-sub">Failed / Total requests</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-glow"></div>
-        <div class="stat-label">p50 / p90 Latency (giây)</div>
-        <div class="stat-value" id="v3-latency">–</div>
-        <div class="stat-sub">Thời gian hoàn thành request</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-glow"></div>
-        <div class="stat-label">p50 / p90 TTFT (giây)</div>
-        <div class="stat-value" id="v3-ttft">–</div>
-        <div class="stat-sub">Time to first token</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-glow"></div>
-        <div class="stat-label">Request Treo (> 5 phút)</div>
-        <div class="stat-value" id="v3-hung" style="color:var(--bad)">–</div>
-        <div class="stat-sub">Outlier latency > 300s</div>
-      </div>
-    </div>
-
-    <div class="section-grid">
-      <!-- Error Rate Timeline with Volume Overlay -->
-      <div class="col-8 panel">
-        <div class="panel-header">
-          <div>
-            <div class="panel-title">Tỷ lệ Lỗi theo thời gian & Lưu lượng</div>
-            <div class="panel-desc">Đường % lỗi đè lên cột tổng volume</div>
-          </div>
-          <div style="display:flex;gap:8px">
-            <span class="badge" style="border-color:var(--bad);color:var(--bad)">● % Lỗi</span>
-            <span class="badge" style="border-color:var(--text-muted);color:var(--text-muted)">■ Volume</span>
-          </div>
-        </div>
-        <div class="chart-box" id="v3-chart-error-trend"></div>
-      </div>
-
-      <!-- Status Code Breakdown -->
-      <div class="col-4 panel">
-        <div class="panel-header">
-          <div class="panel-title">Phân tích Mã lỗi (Status Code)</div>
-          <div class="panel-desc">429 Rate Limit, 503, 502, 400...</div>
-        </div>
-        <div class="chart-box" id="v3-chart-status"></div>
-      </div>
-
-      <!-- Provider Health Table -->
-      <div class="col-12 panel">
-        <div class="panel-header">
-          <div class="panel-title">Bảng Sức khỏe Provider (SLA & Độ tin cậy)</div>
-          <div class="panel-desc">Đánh giá tốc độ và tỷ lệ sự cố của từng nhà cung cấp</div>
-        </div>
-        <div class="table-wrap">
-          <table class="clean-table" id="v3-tbl-provider-health">
-            <thead>
-              <tr>
-                <th>Provider</th>
-                <th class="num">Requests</th>
-                <th class="num">Tỷ lệ Lỗi</th>
-                <th class="num">p50 Latency</th>
-                <th class="num">p90 Latency</th>
-                <th class="num">p50 TTFT</th>
-                <th>Lỗi phổ biến</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- Model Health Table -->
-      <div class="col-12 panel">
-        <div class="panel-header">
-          <div class="panel-title">Bảng Sức khỏe Model thật (Top 15)</div>
-          <div class="panel-desc">So sánh chi tiết tốc độ & lỗi giữa các model</div>
-        </div>
-        <div class="table-wrap">
-          <table class="clean-table" id="v3-tbl-model-health">
-            <thead>
-              <tr>
-                <th>Model</th>
-                <th class="num">Requests</th>
-                <th class="num">Tỷ lệ Lỗi</th>
-                <th class="num">p50 Latency</th>
-                <th class="num">p90 Latency</th>
-                <th class="num">p50 TTFT</th>
-                <th>Lỗi phổ biến</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- =========================================================================
-       VIEW 4: TOKEN & CHI PHÍ (Input/Output, Cache, Histogram)
-       ========================================================================= -->
-  <div id="tab-view4" class="tab-pane" style="display:none">
-    <div class="kpi-grid">
-      <div class="stat-card">
-        <div class="stat-glow"></div>
-        <div class="stat-label">Tổng Input Tokens</div>
-        <div class="stat-value" id="v4-in-tokens">–</div>
-        <div class="stat-sub">Tokens đầu vào (Context)</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-glow"></div>
-        <div class="stat-label">Tổng Output Tokens</div>
-        <div class="stat-value" id="v4-out-tokens">–</div>
-        <div class="stat-sub">Tokens sinh ra</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-glow"></div>
-        <div class="stat-label">Tỷ lệ Output / Input</div>
-        <div class="stat-value" id="v4-ratio">–</div>
-        <div class="stat-sub">Trung bình số token sinh / nạp</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-glow"></div>
-        <div class="stat-label">Tỷ lệ Cache Hit</div>
-        <div class="stat-value" id="v4-cache-hit" style="color:var(--ok)">–</div>
-        <div class="stat-sub" id="v4-cached-saved">Tokens tái sử dụng</div>
-      </div>
-    </div>
-
-    <div class="section-grid">
-      <!-- Input vs Output Timeline -->
-      <div class="col-8 panel">
-        <div class="panel-header">
-          <div>
-            <div class="panel-title">Lưu lượng Token theo thời gian</div>
-            <div class="panel-desc">Input Context vs Output Generated Tokens</div>
-          </div>
-          <div style="display:flex;gap:8px">
-            <span class="badge" style="border-color:var(--purple);color:var(--purple)">● Input</span>
-            <span class="badge" style="border-color:var(--ok);color:var(--ok)">● Output</span>
-          </div>
-        </div>
-        <div class="chart-box" id="v4-chart-token-trend"></div>
-      </div>
-
-      <!-- Context Size Distribution (Histogram) -->
-      <div class="col-4 panel">
-        <div class="panel-header">
-          <div class="panel-title">Phân bố Context Size (Input Tokens)</div>
-          <div class="panel-desc">Nhận diện request context siêu dài</div>
-        </div>
-        <div class="chart-box" id="v4-chart-hist"></div>
-      </div>
-
-      <!-- Token & Cache Detail Table -->
-      <div class="col-12 panel">
-        <div class="panel-header">
-          <div class="panel-title">Thống kê Token & Hiệu quả Cache theo Model</div>
-          <div class="panel-desc">Model nào tận dụng prompt cache tốt nhất</div>
-        </div>
-        <div class="table-wrap">
-          <table class="clean-table" id="v4-tbl-tokens">
-            <thead>
-              <tr>
-                <th>Model</th>
-                <th class="num">Requests</th>
-                <th class="num">Input Tokens</th>
-                <th class="num">Output Tokens</th>
-                <th class="num">Reasoning Tokens</th>
-                <th class="num">Cached Tokens</th>
-                <th class="num">% Cache Hit</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-    <div class="note-callout">
-      ℹ️ <strong>Trạng thái Cache:</strong> <code>cache_creation_tokens = 0</code> (chưa phát sinh cache write explicit từ client).
-    </div>
-  </div>
-
-  <!-- =========================================================================
-       TAB REQUESTS: TRA CỨU REQUESTS & DRAWER SỰ CỐ
-       ========================================================================= -->
-  <div id="tab-requests" class="tab-pane" style="display:none">
-    <div class="panel">
-      <div class="panel-header">
-        <div>
-          <div class="panel-title">Nhật ký Requests (Realtime Log)</div>
-          <div class="panel-desc">Click vào bất kỳ dòng nào để xem chi tiết và nguyên nhân lỗi tự động</div>
-        </div>
-        <div style="display:flex;gap:8px">
-          <button class="btn-icon" onclick="loadRequestsPage(0)">◀ Trang trước</button>
-          <span class="badge" id="req-page-info">Trang 1 / 1</span>
-          <button class="btn-icon" onclick="loadRequestsPage(1)">Trang sau ▶</button>
-        </div>
-      </div>
-      <div class="table-wrap">
-        <table class="clean-table" id="tbl-requests">
-          <thead>
-            <tr>
-              <th>Thời gian</th>
-              <th>Router Alias</th>
-              <th>Model thật</th>
-              <th>Provider</th>
-              <th>API Key</th>
-              <th>Effort</th>
-              <th class="num">Latency</th>
-              <th class="num">Tokens</th>
-              <th>Kết quả</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-
-</div>
-
-<!-- Modal / Drawer for Request Detail & Error Cause -->
-<div class="modal-backdrop" id="modal-detail" onclick="if(event.target===this)closeDetail()">
-  <div class="modal-content">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-      <h3 style="font-size:16px;font-weight:700">Chi tiết Request</h3>
-      <button class="btn-icon" onclick="closeDetail()">✕</button>
-    </div>
-    <div id="detail-body"></div>
   </div>
 </div>
-
-<div class="chart-tooltip" id="tooltip"></div>
 
 <script>
-// ---- cpa auth & storage resolution -----------------------------------------
+var currentMode = "cpa"; // "cpa" | "custom"
+var cpaProvidersList = [];
+
+// Sync Host Theme
+function syncTheme() {
+  try {
+    var theme = localStorage.getItem("cpa_theme") || localStorage.getItem("theme") || "dark";
+    if (document.documentElement.getAttribute("data-theme") !== theme) {
+      document.documentElement.setAttribute("data-theme", theme);
+    }
+  } catch(e) {}
+}
+syncTheme();
+setInterval(syncTheme, 1500);
+
+function setMode(mode) {
+  currentMode = mode;
+  var pillCPA = document.getElementById("modePillCPA");
+  var pillCustom = document.getElementById("modePillCustom");
+  var secCPA = document.getElementById("sectionCPAProvider");
+
+  if (mode === "cpa") {
+    pillCPA.classList.add("active");
+    pillCustom.classList.remove("active");
+    secCPA.style.display = "block";
+    onCPAProviderChange();
+  } else {
+    pillCustom.classList.add("active");
+    pillCPA.classList.remove("active");
+    secCPA.style.display = "none";
+    document.getElementById("keySelectGroup").style.display = "none";
+  }
+}
+
+function maskKey(key) {
+  if (!key) return "";
+  if (key.length <= 10) return "***";
+  return key.slice(0, 6) + "..." + key.slice(-4);
+}
+
+function toggleKeyVisibility() {
+  var inp = document.getElementById("apiKey");
+  if (inp.type === "password") {
+    inp.type = "text";
+  } else {
+    inp.type = "password";
+  }
+}
+
+// Auth key resolution for Management API (Exact match with dashboard2.html)
 var SALT = "cli-proxy-api-webui::secure-storage";
 var PREFIX = "enc::v1::";
 
@@ -1039,106 +575,6 @@ function cpaStoredManagementKey() {
   return "";
 }
 
-function mgmtKeyCandidates() {
-  var list = [];
-  var k = cpaStoredManagementKey();
-  if (k) list.push(k);
-  return list;
-}
-
-// ---- theme & preferences ---------------------------------------------------
-function toggleTheme() {
-  var html = document.documentElement;
-  var cur = html.getAttribute("data-theme") || "dark";
-  var next = cur === "dark" ? "light" : "dark";
-  html.setAttribute("data-theme", next);
-  if (typeof localStorage !== "undefined") localStorage.setItem("cpa_theme", next);
-  if (state.rawSummary) renderAllViews();
-}
-
-// ---- error-log decode + readable rendering ---------------------------------
-function decodeHtmlEntities(str) {
-  if (!str) return "";
-  return str
-    .replace(/&#34;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&amp;/g, '&');
-}
-
-function parseCpaError(rawLog) {
-  var out = { code: "", type: "", message: "", status: 0, trace: "", raw: "" };
-  if (!rawLog) return out;
-  var tm = rawLog.match(/X-Cpa-Trace-Id:\s*([^\r\n]+)/i);
-  if (tm) out.trace = tm[1].trim();
-  var sm = rawLog.match(/Status:\s*(\d+)/i);
-  if (sm) out.status = parseInt(sm[1], 10);
-
-  var pos = 0;
-  while (pos < rawLog.length) {
-    var sub = rawLog.slice(pos);
-    var em = sub.search(/\{\s*["']error["']\s*:\s*\{/);
-    if (em === -1) break;
-    var start = pos + em;
-    var depth = 0, inStr = false, esc = false, end = -1;
-    for (var i = start; i < rawLog.length; i++) {
-      var ch = rawLog[i];
-      if (inStr) {
-        if (esc) esc = false;
-        else if (ch === '\\') esc = true;
-        else if (ch === '"') inStr = false;
-      } else {
-        if (ch === '"') inStr = true;
-        else if (ch === '{') depth++;
-        else if (ch === '}') {
-          depth--;
-          if (depth === 0) { end = i + 1; break; }
-        }
-      }
-    }
-    if (end > start) {
-      try {
-        var rawJson = rawLog.slice(start, end);
-        var parsed = JSON.parse(rawJson);
-        if (parsed && parsed.error) {
-          out.raw = rawJson;
-          out.code = parsed.error.code || "";
-          out.type = parsed.error.type || "";
-          out.message = parsed.error.message || "";
-          break;
-        }
-      } catch (e) {}
-      pos = end;
-    } else {
-      pos = start + 10;
-    }
-  }
-  return out;
-}
-
-function extractHints(msg) {
-  var hints = [];
-  if (!msg) return hints;
-  var dm = msg.match(/(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2}))/);
-  if (dm) {
-    var t = new Date(dm[1]);
-    if (!isNaN(t.getTime())) {
-      hints.push({ label: "Mở lại lúc", value: t.toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" }) });
-    }
-  }
-  var mm = msg.match(/['"]([A-Za-z0-9._-]+)['"]\s+to keep going/i) || msg.match(/Use the paid model ['"]([A-Za-z0-9._-]+)['"]/i);
-  if (mm) hints.push({ label: "Model gợi ý", value: mm[1] });
-  return hints;
-}
-
-function loadErrorLog(r) {
-  loadErrorLogForDetail(r);
-}
-
-// ---- api & auth resolution -------------------------------------------------
 function resolveManagementKey() {
   var params = (typeof window !== "undefined" && window.location && window.location.search) ? new URLSearchParams(window.location.search) : null;
   var k = params ? (params.get("key") || params.get("k")) : null;
@@ -1154,17 +590,26 @@ function resolveManagementKey() {
 
 var currentMgmtKey = resolveManagementKey();
 
-function api(path) {
-  var headers = { "Content-Type": "application/json" };
+function api(path, options) {
+  options = options || {};
+  var headers = options.headers || {};
+  headers["Content-Type"] = "application/json";
   if (currentMgmtKey) headers["Authorization"] = "Bearer " + currentMgmtKey;
-  return fetch("/v0/management/plugins/usage-statistics" + path, { headers: headers })
+  
+  var fetchOpts = {
+    method: options.method || "GET",
+    headers: headers
+  };
+  if (options.body) fetchOpts.body = options.body;
+
+  return fetch("/v0/management/plugins/usage-statistics" + path, fetchOpts)
     .then(function(res) {
       if (res.status === 401) {
         var manual = prompt("Vui lòng nhập Management Key của CPA để xem dữ liệu:");
         if (manual) {
           currentMgmtKey = manual.trim();
           if (typeof localStorage !== "undefined") localStorage.setItem("cpa_mgmt_key", currentMgmtKey);
-          return api(path);
+          return api(path, options);
         }
         throw new Error("HTTP 401 Unauthorized");
       }
@@ -1173,608 +618,399 @@ function api(path) {
     });
 }
 
-// ==========================================================================
-// Formatting Helpers
-// ==========================================================================
-function n(num) {
-  if (num === null || num === undefined) return "0";
-  return Number(num).toLocaleString("vi-VN");
-}
-function nTok(num) {
-  if (!num) return "0";
-  if (num >= 1e9) return (num / 1e9).toFixed(2) + "B";
-  if (num >= 1e6) return (num / 1e6).toFixed(2) + "M";
-  if (num >= 1e3) return (num / 1e3).toFixed(1) + "k";
-  return n(num);
-}
-function esc(str) {
-  if (str === null || str === undefined) return "";
-  return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
-}
+// Load CPA providers on startup
+window.addEventListener("DOMContentLoaded", function() {
+  loadCPAProviders();
+});
 
-// ==========================================================================
-// State & Filter Management
-// ==========================================================================
-var state = {
-  timeRange: "7d",
-  provider: "",
-  alias: "",
-  model: "",
-  attribution: "",
-  apiKey: "",
-  result: "",
-  tab: "view1",
-  reqOffset: 0,
-  reqLimit: 50,
-  rawSummary: null
-};
-
-function setTime(r) {
-  state.timeRange = r;
-  document.querySelectorAll(".pill-btn").forEach(function(btn) {
-    btn.classList.toggle("active", btn.getAttribute("data-time") === r);
-  });
-  refreshData();
-}
-
-var dropdownsInitialized = false;
-
-function buildFilterQueryParams() {
-  var params = [];
-  var now = new Date();
-  var start = null;
-  if (state.timeRange === "24h") start = new Date(now.getTime() - 24 * 3600 * 1000);
-  else if (state.timeRange === "7d") start = new Date(now.getTime() - 7 * 24 * 3600 * 1000);
-  else if (state.timeRange === "30d") start = new Date(now.getTime() - 30 * 24 * 3600 * 1000);
-
-  if (start) params.push("start=" + encodeURIComponent(start.toISOString()));
-  if (state.provider) params.push("provider=" + encodeURIComponent(state.provider));
-  if (state.alias) params.push("alias=" + encodeURIComponent(state.alias));
-  if (state.model) params.push("model=" + encodeURIComponent(state.model));
-  if (state.attribution) params.push("attribution=" + encodeURIComponent(state.attribution));
-  if (state.apiKey) params.push("api_key=" + encodeURIComponent(state.apiKey));
-  if (state.result) params.push("result=" + encodeURIComponent(state.result));
-  return params.length ? "&" + params.join("&") : "";
-}
-
-function applyFilters() {
-  state.provider = document.getElementById("fltProvider").value;
-  state.alias = document.getElementById("fltAlias").value;
-  state.model = document.getElementById("fltModel").value;
-  state.attribution = document.getElementById("fltAttr").value;
-  state.apiKey = document.getElementById("fltKey").value;
-  state.result = document.getElementById("fltResult").value;
-  refreshData();
-}
-
-function resetFilters() {
-  document.getElementById("fltProvider").value = "";
-  document.getElementById("fltAlias").value = "";
-  document.getElementById("fltModel").value = "";
-  document.getElementById("fltAttr").value = "";
-  document.getElementById("fltKey").value = "";
-  document.getElementById("fltResult").value = "";
-  applyFilters();
-}
-
-function switchTab(tabId) {
-  state.tab = tabId;
-  document.querySelectorAll(".tab-btn").forEach(function(b) {
-    b.classList.toggle("active", b.getAttribute("data-tab") === tabId);
-  });
-  document.querySelectorAll(".tab-pane").forEach(function(p) {
-    p.style.display = (p.id === "tab-" + tabId) ? "block" : "none";
-  });
-  if (tabId === "requests") loadRequests();
-  else renderAllViews();
-}
-
-function toggleTheme() {
-  var html = document.documentElement;
-  var cur = html.getAttribute("data-theme") || "dark";
-  var next = cur === "dark" ? "light" : "dark";
-  html.setAttribute("data-theme", next);
-  localStorage.setItem("cpa_theme", next);
-  if (state.rawSummary) renderAllViews();
-}
-
-// ==========================================================================
-// Data Fetching & Rendering
-// ==========================================================================
-function refreshData() {
-  var url = "/usage/summary?source=router" + buildFilterQueryParams();
-
-  api(url).then(function(data) {
-    state.rawSummary = data;
-    if (!dropdownsInitialized) {
-      populateFilterDropdowns(data);
-      dropdownsInitialized = true;
-    }
-    renderAllViews();
-    if (state.tab === "requests") {
-      loadRequestsPage(0);
-    }
-  }).catch(function(err) {
-    console.error("Summary fetch error:", err);
-  });
-}
-
-function populateFilterDropdowns(data) {
-  populateSelect("fltProvider", data.by_provider, "Provider");
-  populateSelect("fltAlias", data.by_alias, "Alias");
-  populateSelect("fltModel", data.by_model, "Model");
-  populateSelect("fltKey", data.by_api_key, "API Key");
-}
-
-function populateSelect(id, items, label) {
-  var sel = document.getElementById(id);
-  var cur = sel.value;
-  sel.innerHTML = '<option value="">' + label + ': Tất cả</option>';
-  if (!items) return;
-  items.forEach(function(it) {
-    var opt = document.createElement("option");
-    opt.value = it.name;
-    opt.textContent = it.name + " (" + n(it.calls) + ")";
-    if (it.name === cur) opt.selected = true;
-    sel.appendChild(opt);
-  });
-}
-
-function renderAllViews() {
-  if (!state.rawSummary) return;
-  var d = state.rawSummary;
-
-  // Render current tab
-  if (state.tab === "view1") renderView1(d);
-  else if (state.tab === "view2") renderView2(d);
-  else if (state.tab === "view3") renderView3(d);
-  else if (state.tab === "view4") renderView4(d);
-}
-
-// ---- Render View 1: Nhận diện ----
-function renderView1(d) {
-  var t = d.totals || {};
-  document.getElementById("v1-calls").textContent = n(t.calls);
-  document.getElementById("v1-keys").textContent = n(t.active_keys || (d.by_api_key ? d.by_api_key.length : 0));
-  var routedCalls = 0;
-  (d.by_attribution || []).forEach(function(a) { if (a.name === "routed") routedCalls = a.calls; });
-  var routedPct = t.calls ? ((routedCalls / t.calls) * 100).toFixed(1) + "%" : "0%";
-  document.getElementById("v1-routed-pct").textContent = routedPct;
-  document.getElementById("v1-models").textContent = n(t.active_models || (d.by_model ? d.by_model.length : 0));
-
-  renderTimelineArea("v1-chart-trend", d.by_hour, [
-    { key: "routed_calls", label: "Routed", color: "#6366f1" },
-    { key: "direct_calls", label: "Direct", color: "#06b6d4" },
-    { key: "failed", label: "Failed", color: "#f43f5e" }
-  ]);
-
-  renderHorizontalBar("v1-chart-keys", (d.by_api_key || []).slice(0, 8), "#6366f1");
-
-  // Router Mapping table
-  var mapTbody = document.querySelector("#v1-tbl-mapping tbody");
-  var mapHtml = "";
-  (d.router_mappings || []).slice(0, 10).forEach(function(m) {
-    mapHtml += '<tr><td><strong>' + esc(m.alias) + '</strong></td><td>' + esc(m.model) + '</td><td class="num">' + n(m.calls) + '</td><td class="num">' + (t.calls ? ((m.calls / t.calls)*100).toFixed(1)+'%' : '–') + '</td></tr>';
-  });
-  mapTbody.innerHTML = mapHtml || '<tr><td colspan="4" style="text-align:center;color:var(--text-muted)">Không có dữ liệu mapping</td></tr>';
-
-  // Provider table
-  var pTbody = document.querySelector("#v1-tbl-providers tbody");
-  var pHtml = "";
-  (d.by_provider || []).forEach(function(p) {
-    pHtml += '<tr><td><strong>' + esc(p.name) + '</strong></td><td class="num">' + n(p.calls) + '</td><td class="num">' + (t.calls ? ((p.calls/t.calls)*100).toFixed(1)+'%' : '–') + '</td><td>' + esc(p.sub || '–') + '</td></tr>';
-  });
-  pTbody.innerHTML = pHtml;
-}
-
-// ---- Render View 2: Cấu hình ----
-function renderView2(d) {
-  var t = d.totals || {};
-  var withEffort = 0;
-  (d.by_effort || []).forEach(function(e) { if (e.name !== "(none)" && e.name !== "none") withEffort += e.calls; });
-  var effortPct = t.calls ? ((withEffort / t.calls) * 100).toFixed(1) + "%" : "0%";
-  document.getElementById("v2-effort-pct").textContent = effortPct;
-
-  var topExec = (d.by_executor && d.by_executor[0]) ? d.by_executor[0].name : "OpenAICompat";
-  document.getElementById("v2-executor-mode").textContent = topExec;
-  document.getElementById("v2-executor-sub").textContent = (d.by_executor && d.by_executor[0]) ? n(d.by_executor[0].calls) + " requests" : "";
-
-  renderDonutChart("v2-chart-effort", d.by_effort || []);
-  renderTimelineArea("v2-chart-effort-trend", d.by_hour, [
-    { key: "high_effort_calls", label: "High Effort", color: "#a855f7" }
-  ]);
-
-  var exTbody = document.querySelector("#v2-tbl-executors tbody");
-  var exHtml = "";
-  (d.by_executor || []).forEach(function(e) {
-    exHtml += '<tr><td><strong>' + esc(e.name) + '</strong></td><td class="num">' + n(e.calls) + '</td><td class="num" style="color:' + (e.failed ? 'var(--bad)' : 'var(--text)') + '">' + n(e.failed) + '</td><td class="num">' + n(Math.round(e.avg_ttft_ms)) + ' ms</td></tr>';
-  });
-  exTbody.innerHTML = exHtml;
-
-  var efTbody = document.querySelector("#v2-tbl-effort-alias tbody");
-  var efHtml = "";
-  (d.by_effort || []).forEach(function(e) {
-    efHtml += '<tr><td><span class="badge badge-accent">' + esc(e.name) + '</span></td><td class="num">' + n(e.calls) + '</td><td class="num">' + nTok(e.reasoning_tokens) + '</td><td class="num">' + (e.p50_latency_s ? e.p50_latency_s.toFixed(2)+'s' : '–') + '</td></tr>';
-  });
-  efTbody.innerHTML = efHtml;
-}
-
-// ---- Render View 3: Hiệu năng & SRE ----
-function renderView3(d) {
-  var t = d.totals || {};
-  var errRate = t.calls ? ((t.failed / t.calls) * 100).toFixed(1) + "%" : "0%";
-  document.getElementById("v3-err-rate").textContent = errRate;
-  document.getElementById("v3-err-sub").textContent = n(t.failed) + " / " + n(t.calls) + " failed";
-
-  document.getElementById("v3-latency").textContent = (t.p50_latency_s || 0).toFixed(1) + "s / " + (t.p90_latency_s || 0).toFixed(1) + "s";
-  document.getElementById("v3-ttft").textContent = (t.p50_ttft_s || 0).toFixed(1) + "s / " + (t.p90_ttft_s || 0).toFixed(1) + "s";
-  document.getElementById("v3-hung").textContent = n(t.hung_calls || 0);
-
-  renderErrorTrend("v3-chart-error-trend", d.by_hour || []);
-  renderHorizontalBar("v3-chart-status", (d.status_codes || []).map(function(s) {
-    return { name: "HTTP " + s.status_code, calls: s.calls };
-  }), "#f43f5e");
-
-  // Provider Health
-  var pTbody = document.querySelector("#v3-tbl-provider-health tbody");
-  var pHtml = "";
-  (d.by_provider || []).forEach(function(p) {
-    var rate = p.calls ? ((p.failed / p.calls) * 100).toFixed(1) + "%" : "0%";
-    pHtml += '<tr><td><strong>' + esc(p.name) + '</strong></td><td class="num">' + n(p.calls) + '</td><td class="num" style="color:' + (p.failed ? 'var(--bad)' : 'var(--ok)') + '">' + rate + '</td><td class="num">' + (p.p50_latency_s||0).toFixed(1) + 's</td><td class="num">' + (p.p90_latency_s||0).toFixed(1) + 's</td><td class="num">' + (p.p50_ttft_s||0).toFixed(1) + 's</td><td>' + (p.top_error ? '<span class="badge badge-bad">HTTP ' + p.top_error + '</span>' : '–') + '</td></tr>';
-  });
-  pTbody.innerHTML = pHtml;
-
-  // Model Health
-  var mTbody = document.querySelector("#v3-tbl-model-health tbody");
-  var mHtml = "";
-  (d.by_model || []).slice(0, 15).forEach(function(m) {
-    var rate = m.calls ? ((m.failed / m.calls) * 100).toFixed(1) + "%" : "0%";
-    mHtml += '<tr><td><strong>' + esc(m.name) + '</strong></td><td class="num">' + n(m.calls) + '</td><td class="num" style="color:' + (m.failed ? 'var(--bad)' : 'var(--ok)') + '">' + rate + '</td><td class="num">' + (m.p50_latency_s||0).toFixed(1) + 's</td><td class="num">' + (m.p90_latency_s||0).toFixed(1) + 's</td><td class="num">' + (m.p50_ttft_s||0).toFixed(1) + 's</td><td>' + (m.top_error ? '<span class="badge badge-bad">HTTP ' + m.top_error + '</span>' : '–') + '</td></tr>';
-  });
-  mTbody.innerHTML = mHtml;
-}
-
-// ---- Render View 4: Token & Chi phí ----
-function renderView4(d) {
-  var t = d.totals || {};
-  document.getElementById("v4-in-tokens").textContent = nTok(t.input_tokens);
-  document.getElementById("v4-out-tokens").textContent = nTok(t.output_tokens);
-  var ratio = t.input_tokens && t.output_tokens ? "1 : " + (t.input_tokens / t.output_tokens).toFixed(0) : "–";
-  document.getElementById("v4-ratio").textContent = ratio;
-
-  var hitPct = t.calls ? ((t.cache_hit_calls / t.calls) * 100).toFixed(1) + "%" : "0%";
-  document.getElementById("v4-cache-hit").textContent = hitPct;
-  document.getElementById("v4-cached-saved").textContent = nTok(t.cached_tokens) + " tokens cached";
-
-  renderTimelineArea("v4-chart-token-trend", d.by_hour, [
-    { key: "input_tokens", label: "Input", color: "#a855f7" },
-    { key: "output_tokens", label: "Output", color: "#10b981" }
-  ]);
-
-  renderHistogram("v4-chart-hist", d.context_histogram || []);
-
-  var tokTbody = document.querySelector("#v4-tbl-tokens tbody");
-  var tokHtml = "";
-  (d.by_model || []).slice(0, 15).forEach(function(m) {
-    var hitRate = m.calls ? (((m.cache_hit_calls || 0) / m.calls) * 100).toFixed(1) + "%" : "0%";
-    tokHtml += '<tr><td><strong>' + esc(m.name) + '</strong></td><td class="num">' + n(m.calls) + '</td><td class="num">' + nTok(m.input_tokens) + '</td><td class="num">' + nTok(m.output_tokens) + '</td><td class="num">' + nTok(m.reasoning_tokens) + '</td><td class="num">' + nTok(m.cached_tokens) + '</td><td class="num" style="color:var(--ok)">' + hitRate + '</td></tr>';
-  });
-  tokTbody.innerHTML = tokHtml;
-}
-
-// ==========================================================================
-// Requests Page & Detail Drawer
-// ==========================================================================
-function loadRequests() {
-  loadRequestsPage(0);
-}
-
-function loadRequestsPage(delta) {
-  if (delta === 1) state.reqOffset += state.reqLimit;
-  else if (delta === 0) state.reqOffset = 0;
-  else if (delta === -1) state.reqOffset = Math.max(0, state.reqOffset - state.reqLimit);
-
-  var url = "/usage/requests?source=router&limit=" + state.reqLimit + "&offset=" + state.reqOffset;
-  if (state.provider) url += "&provider=" + encodeURIComponent(state.provider);
-  if (state.alias) url += "&alias=" + encodeURIComponent(state.alias);
-  if (state.model) url += "&model=" + encodeURIComponent(state.model);
-  if (state.apiKey) url += "&api_key=" + encodeURIComponent(state.apiKey);
-  if (state.attribution) url += "&attribution=" + encodeURIComponent(state.attribution);
-  if (state.result) url += "&result=" + encodeURIComponent(state.result);
-
-  api(url).then(function(page) {
-    var rows = page.rows || [];
-    var tbody = document.querySelector("#tbl-requests tbody");
-    var html = "";
-    rows.forEach(function(r) {
-      var statusBadge = r.failed ? '<span class="badge badge-bad">HTTP ' + r.failure_status_code + '</span>' : '<span class="badge badge-ok">OK</span>';
-      html += '<tr style="cursor:pointer" onclick=\'showDetail(' + JSON.stringify(r) + ')\'>' +
-        '<td>' + (r.timestamp ? r.timestamp.slice(5, 19).replace('T', ' ') : '–') + '</td>' +
-        '<td><strong>' + esc(r.alias || '(direct)') + '</strong></td>' +
-        '<td>' + esc(r.model) + '</td>' +
-        '<td>' + esc(r.provider) + '</td>' +
-        '<td><code>' + esc(r.api_key) + '</code></td>' +
-        '<td><span class="badge">' + esc(r.reasoning_effort || 'none') + '</span></td>' +
-        '<td class="num">' + (r.latency_ms / 1000).toFixed(1) + 's</td>' +
-        '<td class="num">' + nTok(r.tokens.total_tokens) + '</td>' +
-        '<td>' + statusBadge + '</td>' +
-        '</tr>';
-    });
-    tbody.innerHTML = html || '<tr><td colspan="9" style="text-align:center;color:var(--text-muted)">Không có bản ghi nào khớp bộ lọc</td></tr>';
-    var pageNum = Math.floor(state.reqOffset / state.reqLimit) + 1;
-    var totalPages = Math.ceil((page.total || 0) / state.reqLimit) || 1;
-    document.getElementById("req-page-info").textContent = "Trang " + pageNum + " / " + totalPages + " (" + n(page.total) + " requests)";
-  });
-}
-
-function showDetail(r) {
-  var modal = document.getElementById("modal-detail");
-  var body = document.getElementById("detail-body");
-  var statusBadge = r.failed ? '<span class="badge badge-bad">FAILED HTTP ' + r.failure_status_code + '</span>' : '<span class="badge badge-ok">SUCCESS 200 OK</span>';
-
-  var html = '<div class="detail-row"><div class="detail-k">Trạng thái</div><div class="detail-v">' + statusBadge + '</div></div>' +
-    '<div class="detail-row"><div class="detail-k">Thời gian</div><div class="detail-v">' + esc(r.timestamp) + '</div></div>' +
-    '<div class="detail-row"><div class="detail-k">Router Alias</div><div class="detail-v"><strong>' + esc(r.alias || '(direct)') + '</strong></div></div>' +
-    '<div class="detail-row"><div class="detail-k">Model thật</div><div class="detail-v">' + esc(r.model) + '</div></div>' +
-    '<div class="detail-row"><div class="detail-k">Provider</div><div class="detail-v">' + esc(r.provider) + '</div></div>' +
-    '<div class="detail-row"><div class="detail-k">API Key</div><div class="detail-v"><code>' + esc(r.api_key) + '</code></div></div>' +
-    '<div class="detail-row"><div class="detail-k">Latency / TTFT</div><div class="detail-v">' + (r.latency_ms/1000).toFixed(2) + 's (TTFT: ' + (r.ttft_ms/1000).toFixed(2) + 's)</div></div>' +
-    '<div class="detail-row"><div class="detail-k">Tokens</div><div class="detail-v">Input: ' + n(r.tokens.input_tokens) + ' · Output: ' + n(r.tokens.output_tokens) + ' · Cache: ' + n(r.tokens.cached_tokens) + '</div></div>';
-
-  if (r.failed) {
-    html += '<div id="drawer-error-log" style="margin-top:14px"><span class="badge badge-warn">Đang tìm error log…</span></div>';
-  }
-  body.innerHTML = html;
-  modal.style.display = "flex";
-
-  if (r.failed) {
-    loadErrorLogForDetail(r);
-  }
-}
-
-function closeDetail() {
-  document.getElementById("modal-detail").style.display = "none";
-}
-
-function loadErrorLogForDetail(r) {
-  var holder = document.getElementById("drawer-error-log");
-  if (!holder) return;
-  var ts = r.timestamp || "";
-  api("/error-log?ts=" + encodeURIComponent(ts) + "&status=" + (r.failure_status_code || "")).then(function(res) {
-    if (!res.files || !res.files.length) {
-      holder.innerHTML = '<div class="note-callout">Không tìm thấy file error log nào trong ±100s quanh request này.</div>';
+function loadCPAProviders() {
+  var sel = document.getElementById("cpaProviderSelect");
+  api("/providers")
+  .then(function(data) {
+    cpaProvidersList = (data && data.providers) || [];
+    if (cpaProvidersList.length === 0) {
+      sel.innerHTML = '<option value="">-- Không tìm thấy provider nào trong config.yaml --</option>';
       return;
     }
-    var first = res.files[0].name;
-    return api("/error-log?file=" + encodeURIComponent(first)).then(function(content) {
-      var raw = content && content.content ? content.content : JSON.stringify(content);
-      var decoded = decodeHtmlEntities(raw);
-      var err = parseCpaError(decoded);
-
-      var logHtml = '<div class="error-cause-card">' +
-        '<div class="error-cause-title">⚠️ Nguyên nhân thất bại (Bóc tách tự động)</div>';
-      if (err.code) logHtml += '<div class="detail-row"><div class="detail-k">Mã lỗi</div><div class="detail-v"><code>' + esc(err.code) + '</code></div></div>';
-      if (err.type) logHtml += '<div class="detail-row"><div class="detail-k">Loại lỗi</div><div class="detail-v">' + esc(err.type) + '</div></div>';
-      if (err.message) logHtml += '<div class="detail-row"><div class="detail-k">Chi tiết</div><div class="detail-v" style="color:var(--text)">' + esc(err.message) + '</div></div>';
-      extractHints(err.message).forEach(function(h) {
-        logHtml += '<div class="detail-row"><div class="detail-k" style="color:var(--ok)">' + esc(h.label) + '</div><div class="detail-v" style="color:var(--ok);font-weight:600">' + esc(h.value) + '</div></div>';
-      });
-      if (err.trace) logHtml += '<div class="detail-row"><div class="detail-k">CPA Trace</div><div class="detail-v"><code>' + esc(err.trace) + '</code></div></div>';
-      logHtml += '</div>';
-
-      logHtml += '<details style="margin-top:10px"><summary style="cursor:pointer;font-size:12px;color:var(--text-muted)">Xem Raw CPA Log</summary>' +
-        '<pre style="margin-top:8px;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-size:11px;max-height:240px;overflow:auto;white-space:pre-wrap;word-break:break-all">' + esc(decoded) + '</pre></details>';
-
-      holder.innerHTML = logHtml;
-    });
-  }).catch(function(e) {
-    holder.innerHTML = '<div class="note-callout">Không đọc được error log: ' + esc(e.message) + '</div>';
-  });
-}
-
-// ==========================================================================
-// SVG Chart Generators (Pure Math & Bezier Curves)
-// ==========================================================================
-function renderTimelineArea(containerId, data, series) {
-  var box = document.getElementById(containerId);
-  if (!box) return;
-  if (!data || !data.length) {
-    box.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:220px;color:var(--text-muted)">Không có dữ liệu</div>';
-    return;
-  }
-  var W = box.clientWidth || 600;
-  var H = 220, pL = 40, pR = 15, pT = 20, pB = 30;
-  var cW = W - pL - pR;
-  var cH = H - pT - pB;
-
-  var maxVal = 0;
-  data.forEach(function(d) {
-    series.forEach(function(s) {
-      if ((d[s.key] || 0) > maxVal) maxVal = d[s.key] || 0;
-    });
-  });
-  if (maxVal === 0) maxVal = 1;
-
-  var svg = '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '">';
-  // Grid lines
-  for (var i = 0; i <= 4; i++) {
-    var y = pT + cH * (i / 4);
-    var v = Math.round(maxVal * (1 - i / 4));
-    svg += '<line x1="' + pL + '" y1="' + y + '" x2="' + (W - pR) + '" y2="' + y + '" stroke="var(--border)" stroke-dasharray="3,3"/>';
-    svg += '<text x="' + (pL - 8) + '" y="' + (y + 4) + '" fill="var(--text-muted)" font-size="10" text-anchor="end" font-family="var(--mono)">' + nTok(v) + '</text>';
-  }
-
-  // Draw series
-  series.forEach(function(s) {
-    var points = [];
-    data.forEach(function(d, idx) {
-      var x = pL + cW * (idx / (data.length - 1 || 1));
-      var y = pT + cH * (1 - (d[s.key] || 0) / maxVal);
-      points.push({ x: x, y: y, val: d[s.key] || 0, label: d.hour });
+    sel.innerHTML = '<option value="">-- Chọn một Provider (' + cpaProvidersList.length + ' providers đang hoạt động) --</option>';
+    cpaProvidersList.forEach(function(p) {
+      var opt = document.createElement("option");
+      opt.value = p.name;
+      var keyCount = (p.keys && p.keys.length) || 0;
+      opt.textContent = p.name + " (" + (p.base_url || "no-url") + ") - " + keyCount + " key" + (keyCount > 1 ? "s" : "");
+      sel.appendChild(opt);
     });
 
-    // Path
-    var dPath = "M " + points[0].x + " " + points[0].y;
-    for (var i = 1; i < points.length; i++) {
-      dPath += " L " + points[i].x + " " + points[i].y;
+    // Auto select first provider
+    if (cpaProvidersList.length > 0) {
+      sel.value = cpaProvidersList[0].name;
+      onCPAProviderChange();
     }
-    var areaPath = dPath + " L " + points[points.length - 1].x + " " + (pT + cH) + " L " + points[0].x + " " + (pT + cH) + " Z";
-
-    svg += '<path d="' + areaPath + '" fill="' + s.color + '" fill-opacity="0.12"/>';
-    svg += '<path d="' + dPath + '" fill="none" stroke="' + s.color + '" stroke-width="2"/>';
-
-    // Dots
-    points.forEach(function(p) {
-      svg += '<circle cx="' + p.x + '" cy="' + p.y + '" r="3" fill="' + s.color + '" style="cursor:pointer" onmouseenter="showTooltip(event, \'' + esc(p.label) + ': ' + n(p.val) + ' (' + s.label + ')\')" onmouseleave="hideTooltip()"/>';
-    });
+  })
+  .catch(function(err) {
+    sel.innerHTML = '<option value="">-- Lỗi tải providers: ' + err.message + ' --</option>';
   });
-
-  // X Axis labels
-  var step = Math.max(1, Math.floor(data.length / 6));
-  for (var i = 0; i < data.length; i += step) {
-    var x = pL + cW * (i / (data.length - 1 || 1));
-    var lbl = data[i].hour.slice(5, 13);
-    svg += '<text x="' + x + '" y="' + (H - 8) + '" fill="var(--text-muted)" font-size="10" text-anchor="middle" font-family="var(--mono)">' + esc(lbl) + '</text>';
-  }
-
-  svg += '</svg>';
-  box.innerHTML = svg;
 }
 
-function renderErrorTrend(containerId, data) {
-  var box = document.getElementById(containerId);
-  if (!box || !data || !data.length) return;
-  var W = box.clientWidth || 600, H = 220, pL = 40, pR = 40, pT = 20, pB = 30;
-  var cW = W - pL - pR, cH = H - pT - pB;
+function onCPAProviderChange() {
+  var sel = document.getElementById("cpaProviderSelect");
+  var provName = sel.value;
+  var baseInput = document.getElementById("baseUrl");
+  var keyInput = document.getElementById("apiKey");
+  var keyGroup = document.getElementById("keySelectGroup");
+  var keySelect = document.getElementById("cpaKeySelect");
+  var statusSpan = document.getElementById("fetchStatus");
 
-  var maxVol = 0;
-  data.forEach(function(d) { if (d.calls > maxVol) maxVol = d.calls; });
-  if (!maxVol) maxVol = 1;
-
-  var svg = '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '">';
-  var barW = Math.max(2, cW / data.length - 2);
-
-  data.forEach(function(d, idx) {
-    var x = pL + cW * (idx / data.length);
-    var h = (d.calls / maxVol) * cH;
-    var y = pT + cH - h;
-    svg += '<rect x="' + x + '" y="' + y + '" width="' + barW + '" height="' + h + '" rx="2" fill="var(--text-muted)" fill-opacity="0.25"/>';
-  });
-
-  // Error Rate Line (0 - 100%)
-  var points = [];
-  data.forEach(function(d, idx) {
-    var x = pL + cW * (idx / (data.length - 1 || 1)) + barW / 2;
-    var rate = d.calls ? (d.failed / d.calls) : 0;
-    var y = pT + cH * (1 - rate);
-    points.push({ x: x, y: y, rate: rate, hour: d.hour, calls: d.calls, failed: d.failed });
-  });
-
-  if (points.length) {
-    var dPath = "M " + points[0].x + " " + points[0].y;
-    for (var i = 1; i < points.length; i++) dPath += " L " + points[i].x + " " + points[i].y;
-    svg += '<path d="' + dPath + '" fill="none" stroke="var(--bad)" stroke-width="2"/>';
-    points.forEach(function(p) {
-      svg += '<circle cx="' + p.x + '" cy="' + p.y + '" r="3.5" fill="var(--bad)" onmouseenter="showTooltip(event, \'' + esc(p.hour) + ': ' + (p.rate*100).toFixed(1) + '% lỗi (' + n(p.failed) + '/' + n(p.calls) + ')\')" onmouseleave="hideTooltip()"/>';
-    });
-  }
-
-  svg += '</svg>';
-  box.innerHTML = svg;
-}
-
-function renderHorizontalBar(containerId, items, color) {
-  var box = document.getElementById(containerId);
-  if (!box) return;
-  if (!items || !items.length) {
-    box.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:220px;color:var(--text-muted)">Không có dữ liệu</div>';
+  if (!provName) {
+    baseInput.value = "";
+    keyInput.value = "";
+    keyGroup.style.display = "none";
     return;
   }
-  var max = items[0].calls || 1;
-  var html = '<div style="display:flex;flex-direction:column;gap:10px;padding:8px 0">';
-  items.forEach(function(it) {
-    var pct = ((it.calls / max) * 100).toFixed(1);
-    html += '<div>' +
-      '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">' +
-        '<span style="font-family:var(--mono);font-weight:600;color:var(--text)">' + esc(it.name) + '</span>' +
-        '<span style="color:var(--text-muted)">' + n(it.calls) + '</span>' +
-      '</div>' +
-      '<div style="height:6px;background:var(--bg-subtle);border-radius:99px;overflow:hidden">' +
-        '<div style="width:' + pct + '%;height:100%;background:' + color + ';border-radius:99px"></div>' +
-      '</div></div>';
+
+  var prov = null;
+  for (var i = 0; i < cpaProvidersList.length; i++) {
+    if (cpaProvidersList[i].name === provName) {
+      prov = cpaProvidersList[i];
+      break;
+    }
+  }
+
+  if (!prov) return;
+
+  // Auto fill Base URL
+  baseInput.value = prov.base_url || "";
+
+  // Handle Keys
+  var keys = prov.keys || [];
+  if (keys.length === 0) {
+    keyInput.value = "";
+    keyGroup.style.display = "none";
+    statusSpan.textContent = "Provider " + prov.name + " không có API key trong config.";
+  } else if (keys.length === 1) {
+    keyInput.value = keys[0];
+    keyGroup.style.display = "none";
+    statusSpan.textContent = "Đã tự động điền Base URL & Key của " + prov.name + ". Bấm 'Tải danh sách Model' bên dưới.";
+  } else {
+    // Multiple keys -> show dropdown to pick
+    keyGroup.style.display = "block";
+    keySelect.innerHTML = "";
+    keys.forEach(function(k, idx) {
+      var opt = document.createElement("option");
+      opt.value = k;
+      opt.textContent = "Key " + (idx + 1) + " (" + maskKey(k) + ")";
+      keySelect.appendChild(opt);
+    });
+    keyInput.value = keys[0];
+    statusSpan.textContent = "Đã tìm thấy " + keys.length + " keys cho " + prov.name + ". Bạn có thể chọn key hoặc giữ nguyên.";
+  }
+}
+
+function onCPAKeySelectChange() {
+  var keySelect = document.getElementById("cpaKeySelect");
+  var keyInput = document.getElementById("apiKey");
+  keyInput.value = keySelect.value || "";
+}
+
+function fetchModelsFromEndpoint() {
+  var url = (document.getElementById("baseUrl").value || "").trim().replace(/\/+$/, "");
+  var key = (document.getElementById("apiKey").value || "").trim();
+  var statusSpan = document.getElementById("fetchStatus");
+  var modelSelect = document.getElementById("modelSelect");
+  var btn = document.getElementById("btnFetchModels");
+
+  if (!url) {
+    alert("Vui lòng nhập hoặc chọn Base URL!");
+    return;
+  }
+
+  statusSpan.textContent = "Đang kết nối tới " + url + "/models ...";
+  btn.disabled = true;
+
+  var headers = {};
+  if (key) headers["Authorization"] = "Bearer " + key;
+
+  // Call internal proxy endpoint to prevent CORS
+  api("/proxy-fetch", {
+    method: "POST",
+    body: JSON.stringify({
+      url: url + "/models",
+      method: "GET",
+      headers: headers
+    })
+  })
+  .then(function(res) {
+    if (!res.ok) {
+      throw new Error(res.error || ("HTTP " + res.status_code + " - " + (res.raw || res.body || "")));
+    }
+    var data = res.data;
+    if (!data && (res.raw || res.body)) {
+      var rawStr = res.raw || res.body;
+      if (typeof rawStr === "object") {
+        data = rawStr;
+      } else if (typeof rawStr === "string") {
+        try {
+          data = JSON.parse(rawStr);
+        } catch(e) {
+          try {
+            var txt = document.createElement("textarea");
+            txt.innerHTML = rawStr;
+            data = JSON.parse(txt.value);
+          } catch(e2) {
+            throw new Error("Không thể đọc định dạng JSON từ upstream");
+          }
+        }
+      }
+    }
+
+    var models = [];
+    if (data && Array.isArray(data.data)) {
+      models = data.data.map(function(m) { return (typeof m === "string") ? m : ((m && m.id) || ""); }).filter(Boolean);
+    } else if (data && Array.isArray(data.models)) {
+      models = data.models.map(function(m) { return (typeof m === "string") ? m : ((m && (m.name || m.id)) || ""); }).filter(Boolean);
+    } else if (Array.isArray(data)) {
+      models = data.map(function(m) { return (typeof m === "string") ? m : ((m && m.id) || ""); }).filter(Boolean);
+    }
+
+    if (models.length === 0) {
+      statusSpan.textContent = "Không tìm thấy model nào trong danh sách trả về từ upstream.";
+      return;
+    }
+
+    models.sort();
+    modelSelect.innerHTML = '<option value="">-- Đã tìm thấy ' + models.length + ' models, chọn 1 model để kiểm tra --</option>';
+    models.forEach(function(m) {
+      var opt = document.createElement("option");
+      opt.value = m;
+      opt.textContent = m;
+      modelSelect.appendChild(opt);
+    });
+
+    statusSpan.textContent = "Đã tải thành công " + models.length + " models từ upstream!";
+  })
+  .catch(function(err) {
+    statusSpan.textContent = "Lỗi: " + err.message;
+  })
+  .finally(function() {
+    btn.disabled = false;
   });
-  html += '</div>';
-  box.innerHTML = html;
 }
 
-function renderHistogram(containerId, buckets) {
-  var box = document.getElementById(containerId);
-  if (!box || !buckets || !buckets.length) return;
-  var max = 0;
-  buckets.forEach(function(b) { if (b.calls > max) max = b.calls; });
-  if (!max) max = 1;
-
-  var html = '<div style="display:flex;flex-direction:column;gap:10px;padding:8px 0">';
-  buckets.forEach(function(b) {
-    var pct = ((b.calls / max) * 100).toFixed(1);
-    html += '<div>' +
-      '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">' +
-        '<span style="font-family:var(--mono);color:var(--text)">' + esc(b.label) + '</span>' +
-        '<span style="color:var(--text-muted)">' + n(b.calls) + ' reqs</span>' +
-      '</div>' +
-      '<div style="height:6px;background:var(--bg-subtle);border-radius:99px;overflow:hidden">' +
-        '<div style="width:' + pct + '%;height:100%;background:var(--purple);border-radius:99px"></div>' +
-      '</div></div>';
-  });
-  html += '</div>';
-  box.innerHTML = html;
+function log(msg) {
+  var box = document.getElementById("statusLog");
+  box.style.display = "block";
+  box.textContent += "[" + new Date().toLocaleTimeString() + "] " + msg + "\n";
+  box.scrollTop = box.scrollHeight;
 }
 
-function renderDonutChart(containerId, items) {
-  var box = document.getElementById(containerId);
-  if (!box || !items || !items.length) return;
-  var total = 0;
-  items.forEach(function(i) { total += i.calls; });
-  if (!total) total = 1;
-
-  var colors = ["#6366f1", "#a855f7", "#06b6d4", "#10b981", "#f59e0b", "#94a3b8"];
-  var html = '<div style="display:flex;flex-direction:column;gap:10px;padding:8px 0">';
-  items.forEach(function(it, idx) {
-    var pct = ((it.calls / total) * 100).toFixed(1);
-    var color = colors[idx % colors.length];
-    html += '<div>' +
-      '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">' +
-        '<span style="font-weight:600;color:var(--text)">' + esc(it.name) + '</span>' +
-        '<span style="color:var(--text-muted)">' + n(it.calls) + ' (' + pct + '%)</span>' +
-      '</div>' +
-      '<div style="height:6px;background:var(--bg-subtle);border-radius:99px;overflow:hidden">' +
-        '<div style="width:' + pct + '%;height:100%;background:' + color + ';border-radius:99px"></div>' +
-      '</div></div>';
-  });
-  html += '</div>';
-  box.innerHTML = html;
+function getSelectedModel() {
+  var custom = (document.getElementById("customModel").value || "").trim();
+  if (custom) return custom;
+  var sel = document.getElementById("modelSelect");
+  return sel.value || "";
 }
 
-function showTooltip(evt, text) {
-  var tt = document.getElementById("tooltip");
-  tt.textContent = text;
-  tt.style.display = "block";
-  tt.style.left = (evt.pageX + 12) + "px";
-  tt.style.top = (evt.pageY - 28) + "px";
+async function testSingleEffort(targetUrl, apiKey, model, effort) {
+  var body = {
+    model: model,
+    messages: [
+      { role: "user", content: "Say hello in 1 word." }
+    ],
+    max_tokens: 16
+  };
+
+  if (effort !== "none") {
+    body.reasoning_effort = effort;
+  }
+
+  var headers = {
+    "Content-Type": "application/json"
+  };
+  if (apiKey) headers["Authorization"] = "Bearer " + apiKey;
+
+  var start = performance.now();
+  try {
+    var res = await api("/proxy-fetch", {
+      method: "POST",
+      body: JSON.stringify({
+        url: targetUrl,
+        method: "POST",
+        headers: headers,
+        body: JSON.stringify(body)
+      })
+    });
+
+    var latency = Math.round(performance.now() - start);
+
+    if (!res.ok) {
+      return {
+        effort: effort,
+        ok: false,
+        status: res.status_code || 500,
+        latency: latency,
+        tokens: 0,
+        isThinking: false,
+        note: (res.error || res.raw || res.body || "Request failed").slice(0, 80)
+      };
+    }
+
+    var data = res.data || {};
+    if (!res.data && (res.raw || res.body)) {
+      var rawStr = res.raw || res.body;
+      if (typeof rawStr === "object") data = rawStr;
+      else if (typeof rawStr === "string") {
+        try { data = JSON.parse(rawStr); } catch(e) {}
+      }
+    }
+
+    var reasoningTokens = 0;
+    if (data.usage) {
+      if (data.usage.completion_tokens_details && typeof data.usage.completion_tokens_details.reasoning_tokens === "number") {
+        reasoningTokens = data.usage.completion_tokens_details.reasoning_tokens;
+      } else if (typeof data.usage.reasoning_tokens === "number") {
+        reasoningTokens = data.usage.reasoning_tokens;
+      }
+    }
+
+    var content = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "";
+    var isThinking = reasoningTokens > 0 || content.includes("<think>");
+
+    return {
+      effort: effort,
+      ok: true,
+      status: 200,
+      latency: latency,
+      tokens: reasoningTokens,
+      isThinking: isThinking,
+      note: content.slice(0, 30).trim() || "OK"
+    };
+  } catch (err) {
+    var latency = Math.round(performance.now() - start);
+    return {
+      effort: effort,
+      ok: false,
+      status: 0,
+      latency: latency,
+      tokens: 0,
+      isThinking: false,
+      note: err.message
+    };
+  }
 }
 
-function hideTooltip() {
-  document.getElementById("tooltip").style.display = "none";
+async function startInspection() {
+  var model = getSelectedModel();
+  var btn = document.getElementById("btnInspect");
+  var logBox = document.getElementById("statusLog");
+  var resPanel = document.getElementById("resultPanel");
+  var tbody = document.getElementById("resultTbody");
+  var recBox = document.getElementById("recommendationBox");
+
+  if (!model) { alert("Vui lòng chọn hoặc nhập tên Model cần kiểm tra!"); return; }
+
+  var base = (document.getElementById("baseUrl").value || "").trim().replace(/\/+$/, "");
+  var key = (document.getElementById("apiKey").value || "").trim();
+
+  if (!base) {
+    alert("Vui lòng nhập hoặc chọn Base URL!");
+    return;
+  }
+
+  var targetUrl = base + "/chat/completions";
+
+  btn.disabled = true;
+  logBox.style.display = "block";
+  logBox.textContent = "";
+  resPanel.style.display = "block";
+  tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-dim)">Đang tiến hành probe các mức reasoning_effort...</td></tr>';
+  recBox.style.display = "none";
+
+  document.getElementById("resultModelInfo").innerHTML = "Model: <strong>" + model + "</strong> · Endpoint: " + targetUrl;
+
+  log("Bắt đầu kiểm tra model: " + model);
+  log("Endpoint: " + targetUrl);
+
+  var efforts = ["none", "low", "medium", "high", "xhigh"];
+  var results = [];
+
+  tbody.innerHTML = "";
+
+  for (var i = 0; i < efforts.length; i++) {
+    var eff = efforts[i];
+    log("Đang probe mức: " + eff + " ...");
+    var res = await testSingleEffort(targetUrl, key, model, eff);
+    results.push(res);
+
+    var tr = document.createElement("tr");
+
+    var statusBadge = "";
+    if (res.ok) {
+      if (res.isThinking) {
+        statusBadge = '<span class="badge badge-success">Hỗ trợ (Thinking Active)</span>';
+      } else {
+        statusBadge = '<span class="badge badge-neutral">Chấp nhận (No Thinking)</span>';
+      }
+    } else {
+      statusBadge = '<span class="badge badge-danger">Lỗi ' + res.status + '</span>';
+    }
+
+    tr.innerHTML = [
+      '<td><code>' + eff + '</code></td>',
+      '<td>' + statusBadge + '</td>',
+      '<td><strong>' + res.tokens + '</strong> tokens</td>',
+      '<td>' + res.latency + ' ms</td>',
+      '<td><span style="color:var(--text-dim)">' + res.note + '</span></td>'
+    ].join("");
+
+    tbody.appendChild(tr);
+    log("Kết quả [" + eff + "]: " + (res.ok ? "200 OK" : ("Lỗi " + res.status)) + " (" + res.latency + "ms)");
+  }
+
+  log("Hoàn thành toàn bộ probe tests!");
+  btn.disabled = false;
+
+  // Generate Recommendations
+  generateRecommendation(model, results);
 }
 
-// ==========================================================================
-// Initial Load
-// ==========================================================================
-document.addEventListener("DOMContentLoaded", function() {
-  var savedTheme = localStorage.getItem("cpa_theme");
-  if (savedTheme) document.documentElement.setAttribute("data-theme", savedTheme);
-  refreshData();
-});
+function generateRecommendation(model, results) {
+  var recBox = document.getElementById("recommendationBox");
+  var pre = document.getElementById("yamlConfigCode");
+
+  var supported = results.filter(function(r) { return r.ok; }).map(function(r) { return r.effort; });
+  var thinkingActive = results.filter(function(r) { return r.ok && r.isThinking; }).map(function(r) { return r.effort; });
+
+  var yaml = "# Cấu hình đề xuất cho model-router trong CPA config.yaml:\n";
+  yaml += "- name: \"" + model + "\"\n";
+  if (thinkingActive.length > 0) {
+    yaml += "  thinking-levels:\n";
+    thinkingActive.forEach(function(lv) {
+      if (lv !== "none") {
+        yaml += "    - \"" + lv + "\"\n";
+      }
+    });
+    yaml += "  default-thinking: \"" + (thinkingActive[thinkingActive.length - 1] || "medium") + "\"\n";
+  } else if (supported.length > 0) {
+    yaml += "  # Model phản hồi bình thường nhưng không xuất reasoning tokens riêng biệt\n";
+  } else {
+    yaml += "  # Model bị lỗi với tất cả các mức probe\n";
+  }
+
+  pre.textContent = yaml;
+  recBox.style.display = "block";
+}
+
+function copyConfig() {
+  var text = document.getElementById("yamlConfigCode").textContent;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(function() {
+      alert("Đã sao chép cấu hình YAML vào Clipboard!");
+    });
+  } else {
+    alert("Vui lòng bôi đen và copy thủ công.");
+  }
+}
 </script>
+
 </body>
 </html>
