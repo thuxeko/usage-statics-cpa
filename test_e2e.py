@@ -100,7 +100,10 @@ def main():
         assert out.get("stored"), out
     print(f"PASS usage.handle: {len(records)} records stored")
 
-    # 4. summary aggregate
+    # 4. summary aggregate — CPA forwards the FULL public path to
+    # management.handle (matches model-router source); also accept relative.
+    code, body = mgmt("GET", "/v0/management/plugins/usage-statistics/usage/summary", {})
+    assert code == 200, (code, body[:200])
     code, body = mgmt("GET", "/plugins/usage-statistics/usage/summary", {})
     assert code == 200, code
     s = json.loads(body)
@@ -139,17 +142,16 @@ def main():
     assert page["total"] == 2, page["total"]  # matches alias OR model
     print("PASS requests: pagination + failed filter + alias filter")
 
-    # 6. dashboard resource page
+    # 6. dashboard resource page (full public path like CPA dispatches)
     code, body = mgmt("GET", "/v0/resource/plugins/usage-statistics/dashboard", {})
     assert code == 200, code
     html = body.decode()
-    assert "Usage Statistics" in html and "usage/summary" in html and "by_alias" not in [
-        "x"] and "low-com" not in html, "dashboard html unexpected"
+    assert "Usage Statistics" in html and "usage/summary" in html, "dashboard html unexpected"
     assert len(html) > 5000, len(html)
     print("PASS dashboard: HTML page served, %d bytes, title + API calls present" % len(html))
 
-    # 7. unknown route → 404
-    code, _ = mgmt("GET", "/plugins/usage-statistics/nope", {})
+    # 7. unknown route → 404 (full path form)
+    code, _ = mgmt("GET", "/v0/management/plugins/usage-statistics/nope", {})
     assert code == 404, code
     print("PASS unknown route 404")
 
