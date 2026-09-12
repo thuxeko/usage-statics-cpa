@@ -6,7 +6,7 @@
 <title>Analytics Dashboard · CLIProxyAPI</title>
 <style>
 /* ==========================================================================
-   Minimalist Slate Theme (Clean, High-Density, Icon-Free)
+   Minimalist Slate Theme (Clean, High-Density, Icon-Free, Vietnamese)
    ========================================================================== */
 :root {
   --bg: #090d16;
@@ -245,6 +245,28 @@ body {
   justify-content: space-between;
   align-items: center;
 }
+.info-tip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 9px;
+  font-family: var(--mono);
+  font-weight: 700;
+  cursor: help;
+  user-select: none;
+  transition: all 0.15s;
+}
+.info-tip:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--bg-card-hover);
+}
 .stat-value {
   font-size: 20px;
   font-weight: 700;
@@ -332,14 +354,6 @@ table.clean-table .num {
   text-align: right;
   font-family: var(--mono);
 }
-.clickable-item {
-  color: var(--accent);
-  cursor: pointer;
-  font-weight: 600;
-}
-.clickable-item:hover {
-  text-decoration: underline;
-}
 
 /* SVG Chart Box */
 .chart-box {
@@ -412,7 +426,7 @@ svg.chart {
 }
 .detail-k {
   color: var(--text-dim);
-  width: 110px;
+  width: 120px;
   flex-shrink: 0;
 }
 .detail-v {
@@ -452,12 +466,21 @@ svg.chart {
   <header class="app-header">
     <div>
       <div class="brand-title">Analytics Dashboard</div>
-      <div class="brand-sub">CLIProxyAPI Internal Gateway Monitoring</div>
+      <div class="brand-sub">Hệ thống phân tích & theo dõi Gateway CLIProxyAPI (Giờ Việt Nam · UTC+7)</div>
     </div>
-    <div class="header-actions">
-      <span class="badge" id="srcBadge">source: model-router.db</span>
-      <button class="btn-text" onclick="toggleTheme()">Theme</button>
-      <button class="btn-text" onclick="refreshData()">Refresh</button>
+    <div class="header-actions" style="flex-direction:column;align-items:flex-end;gap:3px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <select id="autoRefreshSelect" class="filter-select" onchange="changeAutoRefresh(this.value)" title="Tự động làm mới dữ liệu">
+          <option value="0">Tự động: Tắt</option>
+          <option value="30">Tự động: 30s</option>
+          <option value="60">Tự động: 1 phút</option>
+          <option value="300">Tự động: 5 phút</option>
+          <option value="900">Tự động: 15 phút</option>
+          <option value="1800">Tự động: 30 phút</option>
+        </select>
+        <button class="btn-text" onclick="refreshData()">Làm mới</button>
+      </div>
+      <span id="lastUpdated" style="font-size:11px;color:var(--text-dim);font-family:var(--mono)">Cập nhật lúc: –</span>
     </div>
   </header>
 
@@ -466,131 +489,51 @@ svg.chart {
     <div class="filter-row">
       <!-- Time Presets -->
       <div class="time-pills">
-        <button class="pill-btn" data-time="1h" onclick="setTime('1h')">1h</button>
-        <button class="pill-btn" data-time="6h" onclick="setTime('6h')">6h</button>
-        <button class="pill-btn" data-time="24h" onclick="setTime('24h')">24h</button>
-        <button class="pill-btn active" data-time="7d" onclick="setTime('7d')">7 days</button>
-        <button class="pill-btn" data-time="all" onclick="setTime('all')">All</button>
+        <button class="pill-btn" data-time="1h" onclick="setTime('1h')">1 giờ</button>
+        <button class="pill-btn" data-time="6h" onclick="setTime('6h')">6 giờ</button>
+        <button class="pill-btn" data-time="24h" onclick="setTime('24h')">24 giờ</button>
+        <button class="pill-btn active" data-time="7d" onclick="setTime('7d')">7 ngày</button>
+        <button class="pill-btn" data-time="all" onclick="setTime('all')">Tất cả</button>
       </div>
-
-      <select id="fltGranularity" class="filter-select" onchange="renderAllViews()">
-        <option value="auto">Density: Auto</option>
-        <option value="hour">1 Hour</option>
-        <option value="day">1 Day</option>
-      </select>
-
-      <select id="fltProvider" class="filter-select" onchange="applyFilters()">
-        <option value="">Provider: All</option>
-      </select>
-
-      <select id="fltModel" class="filter-select" onchange="applyFilters()">
-        <option value="">Model: All</option>
-      </select>
-
-      <select id="fltRouter" class="filter-select" onchange="applyFilters()">
-        <option value="">Router: All</option>
-      </select>
-
-      <select id="fltKey" class="filter-select" onchange="applyFilters()">
-        <option value="">API Key: All</option>
-      </select>
-
-      <select id="fltAttribution" class="filter-select" onchange="applyFilters()">
-        <option value="">Attribution: All</option>
-        <option value="routed">routed</option>
-        <option value="direct">direct</option>
-        <option value="unattributed">unattributed</option>
-      </select>
-
-      <select id="fltEffort" class="filter-select" onchange="applyFilters()">
-        <option value="">Reasoning: All</option>
-        <option value="high">high</option>
-        <option value="medium">medium</option>
-        <option value="low">low</option>
-        <option value="max">max</option>
-        <option value="minimal">minimal</option>
-        <option value="Not Specified">Not Specified</option>
-      </select>
-
-      <select id="fltExecutor" class="filter-select" onchange="applyFilters()">
-        <option value="">Executor: All</option>
-      </select>
-
-      <select id="fltStatus" class="filter-select" onchange="applyFilters()">
-        <option value="">Status: All</option>
-        <option value="success">Success</option>
-        <option value="failed">Failed</option>
-      </select>
-
-      <select id="fltStatusCode" class="filter-select" onchange="applyFilters()">
-        <option value="">Status Code: All</option>
-        <option value="429">429 (Rate Limit)</option>
-        <option value="503">503 (Unavailable)</option>
-        <option value="502">502 (Bad Gateway)</option>
-        <option value="400">400 (Bad Request)</option>
-        <option value="524">524 (Timeout)</option>
-        <option value="403">403 (Forbidden)</option>
-        <option value="401">401 (Unauthorized)</option>
-        <option value="402">402 (Payment)</option>
-      </select>
-
-      <button class="btn-text" onclick="resetFilters()">Reset</button>
     </div>
   </div>
 
-  <!-- Navigation Tabs (No View x text) -->
+  <!-- Navigation Tabs (Clean naming, no View x prefix) -->
   <div class="nav-tabs">
-    <button class="tab-btn active" data-tab="overview" onclick="switchTab('overview')">Overview</button>
-    <button class="tab-btn" data-tab="requests_models" onclick="switchTab('requests_models')">Requests & Models</button>
-    <button class="tab-btn" data-tab="performance" onclick="switchTab('performance')">Performance</button>
-    <button class="tab-btn" data-tab="tokens_efficiency" onclick="switchTab('tokens_efficiency')">Tokens & Efficiency</button>
+    <button class="tab-btn active" data-tab="overview" onclick="switchTab('overview')">Tổng quan</button>
+    <button class="tab-btn" data-tab="requests_models" onclick="switchTab('requests_models')">Lưu lượng & Model</button>
+    <button class="tab-btn" data-tab="performance" onclick="switchTab('performance')">Hiệu năng & Độ trễ</button>
+    <button class="tab-btn" data-tab="tokens_efficiency" onclick="switchTab('tokens_efficiency')">Token & Cache</button>
     <button class="tab-btn" data-tab="requests_log" onclick="switchTab('requests_log')">Tra cứu Requests</button>
   </div>
 
   <!-- =========================================================================
-       TAB 1: OVERVIEW
+       TAB 1: TỔNG QUAN (OVERVIEW)
        ========================================================================= -->
   <div id="tab-overview" class="tab-pane">
     <div class="kpi-grid">
       <div class="stat-card">
-        <div class="stat-label">Total Requests</div>
+        <div class="stat-label">Tổng số Request <span class="info-tip" title="Tổng lượt gọi (câu hỏi/yêu cầu) mà client gửi qua gateway">i</span></div>
         <div class="stat-value" id="ov-total">–</div>
-        <div class="stat-sub">Total inbound traffic</div>
+        <div class="stat-sub">Tổng lượt gọi đến gateway</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Successful Requests</div>
-        <div class="stat-value" id="ov-success" style="color:var(--ok)">–</div>
-        <div class="stat-sub">200 OK responses</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Failed Requests</div>
-        <div class="stat-value" id="ov-failed" style="color:var(--bad)">–</div>
-        <div class="stat-sub">HTTP error responses</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Error Rate</div>
+        <div class="stat-label">Tỷ lệ Lỗi & Trạng thái <span class="info-tip" title="Tỷ lệ thất bại cùng số lượng request Thành công (200 OK) và Thất bại (4xx, 5xx)">i</span></div>
         <div class="stat-value" id="ov-error-rate">–</div>
-        <div class="stat-sub">Failed / Total ratio</div>
+        <div class="stat-sub">
+          <span style="color:var(--ok)"><span id="ov-success">–</span> thành công</span> · 
+          <span style="color:var(--bad)"><span id="ov-failed">–</span> lỗi</span>
+        </div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">P50 / P90 Latency</div>
-        <div class="stat-value" id="ov-latency">–</div>
-        <div class="stat-sub">Response duration</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">P50 TTFT</div>
-        <div class="stat-value" id="ov-ttft">–</div>
-        <div class="stat-sub">Time to first token</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Total Input Tokens</div>
+        <div class="stat-label">Tổng Input Tokens <span class="info-tip" title="Tổng số lượng từ/token người dùng nạp vào model (gồm câu hỏi + tài liệu đính kèm + lịch sử chat)">i</span></div>
         <div class="stat-value" id="ov-in-tokens">–</div>
-        <div class="stat-sub">Prompt context tokens</div>
+        <div class="stat-sub">Context prompt nạp vào</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Total Output Tokens</div>
+        <div class="stat-label">Tổng Output Tokens <span class="info-tip" title="Tổng số lượng từ/token mà model sinh ra để trả lời người dùng">i</span></div>
         <div class="stat-value" id="ov-out-tokens">–</div>
-        <div class="stat-sub">Generated output tokens</div>
+        <div class="stat-sub">Tokens model sinh ra</div>
       </div>
     </div>
 
@@ -598,12 +541,12 @@ svg.chart {
       <div class="col-8 panel">
         <div class="panel-header">
           <div>
-            <div class="panel-title">Request Volume Over Time</div>
-            <div class="panel-desc">Inbound request count partitioned by Success and Failed</div>
+            <div class="panel-title">Lưu lượng Request theo thời gian</div>
+            <div class="panel-desc">Số lượng yêu cầu Thành công vs Thất bại (Giờ VN · UTC+7)</div>
           </div>
           <div style="display:flex;gap:6px">
-            <span class="badge badge-ok">[Success]</span>
-            <span class="badge badge-bad">[Failed]</span>
+            <span class="badge badge-ok">Thành công</span>
+            <span class="badge badge-bad">Thất bại</span>
           </div>
         </div>
         <div class="chart-box" id="ov-chart-volume"></div>
@@ -611,8 +554,8 @@ svg.chart {
 
       <div class="col-4 panel">
         <div class="panel-header">
-          <div class="panel-title">HTTP Error Distribution</div>
-          <div class="panel-desc">Breakdown by status code (429, 503, 502, 400...)</div>
+          <div class="panel-title">Phân bố Mã lỗi HTTP</div>
+          <div class="panel-desc">Phân tích theo mã lỗi 429, 503, 502, 400...</div>
         </div>
         <div class="chart-box" id="ov-chart-errors"></div>
       </div>
@@ -620,21 +563,21 @@ svg.chart {
       <div class="col-12 panel">
         <div class="panel-header">
           <div>
-            <div class="panel-title">Provider Health</div>
-            <div class="panel-desc">Click any provider name to drill down across all metrics</div>
+            <div class="panel-title">Sức khỏe Nhà cung cấp (Provider Health)</div>
+            <div class="panel-desc">Nhấp vào tên Provider để lọc chi tiết (Drill-down)</div>
           </div>
         </div>
         <div class="table-wrap">
           <table class="clean-table" id="ov-tbl-provider-health">
             <thead>
               <tr>
-                <th>Provider</th>
+                <th>Nhà cung cấp</th>
                 <th class="num">Requests</th>
-                <th class="num">Success</th>
-                <th class="num">Failed</th>
-                <th class="num">Error %</th>
-                <th class="num">P50</th>
-                <th class="num">P90</th>
+                <th class="num">Thành công</th>
+                <th class="num">Thất bại</th>
+                <th class="num">Tỷ lệ lỗi %</th>
+                <th class="num" title="Độ trễ P50: 50% request xử lý nhanh hơn mức này">P50</th>
+                <th class="num" title="Độ trễ P90: 90% request xử lý nhanh hơn mức này">P90</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -645,39 +588,39 @@ svg.chart {
   </div>
 
   <!-- =========================================================================
-       TAB 2: REQUESTS & MODELS
+       TAB 2: LƯU LƯỢNG & MODEL (REQUESTS & MODELS)
        ========================================================================= -->
   <div id="tab-requests_models" class="tab-pane" style="display:none">
     <div class="section-grid">
       <div class="col-4 panel">
         <div class="panel-header">
-          <div class="panel-title">Provider Distribution</div>
-          <div class="panel-desc">Traffic share by upstream provider</div>
+          <div class="panel-title">Phân bố theo Provider</div>
+          <div class="panel-desc">Tỷ trọng lưu lượng theo nhà cung cấp</div>
         </div>
         <div class="chart-box" id="rm-chart-provider"></div>
       </div>
 
       <div class="col-4 panel">
         <div class="panel-header">
-          <div class="panel-title">Router Distribution</div>
-          <div class="panel-desc">Traffic share by router alias</div>
+          <div class="panel-title">Phân bố theo Router Alias</div>
+          <div class="panel-desc">Cơ cấu Router Alias (high-com, low-com...)</div>
         </div>
         <div class="chart-box" id="rm-chart-router"></div>
       </div>
 
       <div class="col-4 panel">
         <div class="panel-header">
-          <div class="panel-title">Attribution & Clients</div>
-          <div class="panel-desc">routed / direct / unattributed and top API keys</div>
+          <div class="panel-title">Client API Keys</div>
+          <div class="panel-desc">Lưu lượng theo từng Client Key (đã ẩn danh)</div>
         </div>
-        <div class="chart-box" id="rm-chart-attr"></div>
+        <div class="chart-box" id="rm-chart-keys"></div>
       </div>
 
       <div class="col-12 panel">
         <div class="panel-header">
           <div>
-            <div class="panel-title">Model Performance Table</div>
-            <div class="panel-desc">Click column header to sort · Click model name to drill down</div>
+            <div class="panel-title">Bảng Hiệu năng Model</div>
+            <div class="panel-desc">Click vào tiêu đề cột để sắp xếp</div>
           </div>
         </div>
         <div class="table-wrap">
@@ -685,14 +628,14 @@ svg.chart {
             <thead>
               <tr>
                 <th>Provider</th>
-                <th class="sortable" onclick="sortModelTable('name')">Model</th>
+                <th class="sortable" onclick="sortModelTable('name')">Model thật</th>
                 <th class="num sortable" onclick="sortModelTable('calls')">Requests</th>
-                <th class="num sortable" onclick="sortModelTable('failed')">Failed</th>
-                <th class="num sortable" onclick="sortModelTable('error_rate')">Error %</th>
-                <th class="num sortable" onclick="sortModelTable('p50_latency_s')">P50 Latency</th>
-                <th class="num sortable" onclick="sortModelTable('p90_latency_s')">P90 Latency</th>
-                <th class="num sortable" onclick="sortModelTable('input_tokens')">Input Tokens</th>
-                <th class="num sortable" onclick="sortModelTable('output_tokens')">Output Tokens</th>
+                <th class="num sortable" onclick="sortModelTable('failed')">Thất bại</th>
+                <th class="num sortable" onclick="sortModelTable('error_rate')">Tỷ lệ lỗi %</th>
+                <th class="num sortable" onclick="sortModelTable('p50_latency_s')" title="P50 Độ trễ: 50% request nhanh hơn mức này">P50 Độ trễ ↕</th>
+                <th class="num sortable" onclick="sortModelTable('p90_latency_s')" title="P90 Độ trễ: 90% request nhanh hơn mức này (đo SLA)">P90 Độ trễ ↕</th>
+                <th class="num sortable" onclick="sortModelTable('input_tokens')" title="Tổng token context/câu hỏi nạp vào model">Input Tokens ↕</th>
+                <th class="num sortable" onclick="sortModelTable('output_tokens')" title="Tổng token câu trả lời model sinh ra">Output Tokens ↕</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -702,17 +645,17 @@ svg.chart {
 
       <div class="col-12 panel">
         <div class="panel-header">
-          <div class="panel-title">Provider × Model Mapping</div>
-          <div class="panel-desc">Relationship between Router Alias and actual Provider Model</div>
+          <div class="panel-title">Ánh xạ Router Alias → Model thật</div>
+          <div class="panel-desc">Cơ cấu model thật phục vụ cho từng alias</div>
         </div>
         <div class="table-wrap">
           <table class="clean-table" id="rm-tbl-mapping">
             <thead>
               <tr>
                 <th>Router Model (Alias)</th>
-                <th>Provider Model</th>
+                <th>Model thật</th>
                 <th class="num">Requests</th>
-                <th class="num">Share %</th>
+                <th class="num">Tỷ trọng</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -723,49 +666,49 @@ svg.chart {
   </div>
 
   <!-- =========================================================================
-       TAB 3: PERFORMANCE
+       TAB 3: HIỆU NĂNG & ĐỘ TRỄ (PERFORMANCE)
        ========================================================================= -->
   <div id="tab-performance" class="tab-pane" style="display:none">
     <div class="kpi-grid">
       <div class="stat-card">
-        <div class="stat-label">P50 Latency</div>
+        <div class="stat-label">Độ trễ P50 <span class="info-tip" title="P50 (Median): 50% số request xử lý nhanh hơn mốc này. Đại diện cho tốc độ thông thường lúc mạng bình thường">i</span></div>
         <div class="stat-value" id="pf-p50">–</div>
-        <div class="stat-sub">Median duration</div>
+        <div class="stat-sub">50% request nhanh hơn · Càng thấp càng tốt (mượt)</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">P75 Latency</div>
+        <div class="stat-label">Độ trễ P75 <span class="info-tip" title="P75: 75% số request nhanh hơn mốc này. Cho thấy tốc độ khi hệ thống bắt đầu có tải">i</span></div>
         <div class="stat-value" id="pf-p75">–</div>
-        <div class="stat-sub">75th percentile</div>
+        <div class="stat-sub">75% request nhanh hơn · Càng thấp càng tốt</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">P90 Latency</div>
+        <div class="stat-label">Độ trễ P90 <span class="info-tip" title="P90: 90% số request nhanh hơn mốc này (chỉ 10% bị chậm hơn). Rất quan trọng để đo cam kết chất lượng dịch vụ (SLA)">i</span></div>
         <div class="stat-value" id="pf-p90">–</div>
-        <div class="stat-sub">90th percentile</div>
+        <div class="stat-sub">90% request nhanh hơn · Càng thấp càng ổn định</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">P95 Latency</div>
+        <div class="stat-label">Độ trễ P95 <span class="info-tip" title="P95: 95% số request nhanh hơn mốc này. Phản ánh các trường hợp mạng lag hoặc model bị nghẽn tải nặng">i</span></div>
         <div class="stat-value" id="pf-p95">–</div>
-        <div class="stat-sub">95th percentile</div>
+        <div class="stat-sub">95% request nhanh hơn · Càng thấp càng ít lag</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">P99 Latency</div>
+        <div class="stat-label">Độ trễ P99 <span class="info-tip" title="P99: 99% số request nhanh hơn mốc này (chỉ 1% chậm nhất). Dùng để phát hiện các request bị treo bất thường">i</span></div>
         <div class="stat-value" id="pf-p99" style="color:var(--warn)">–</div>
-        <div class="stat-sub">99th percentile</div>
+        <div class="stat-sub">99% request nhanh hơn · Cao quá là có nguy cơ treo</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Max Latency</div>
+        <div class="stat-label">Độ trễ Lớn nhất <span class="info-tip" title="Thời gian của request chạy chậm kỷ lục trong khoảng thời gian đã chọn">i</span></div>
         <div class="stat-value" id="pf-max" style="color:var(--bad)">–</div>
-        <div class="stat-sub">Slowest recorded</div>
+        <div class="stat-sub">Request chậm nhất · Càng thấp càng tốt</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">P50 TTFT</div>
+        <div class="stat-label">P50 TTFT <span class="info-tip" title="P50 TTFT (Time To First Token): Thời gian chờ trung bình để thấy chữ đầu tiên xuất hiện">i</span></div>
         <div class="stat-value" id="pf-ttft-p50">–</div>
-        <div class="stat-sub">First token median</div>
+        <div class="stat-sub">Chờ token đầu · Càng thấp gõ càng nhanh</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">P90 TTFT</div>
+        <div class="stat-label">P90 TTFT <span class="info-tip" title="P90 TTFT: Mốc thời gian chờ chữ đầu tiên ở 10% các trường hợp bị nghẽn chậm nhất">i</span></div>
         <div class="stat-value" id="pf-ttft-p90">–</div>
-        <div class="stat-sub">First token P90</div>
+        <div class="stat-sub">Chờ token đầu khi nghẽn · Càng thấp càng tốt</div>
       </div>
     </div>
 
@@ -773,14 +716,14 @@ svg.chart {
       <div class="col-8 panel">
         <div class="panel-header">
           <div>
-            <div class="panel-title">Latency Trend (Multi-Percentile)</div>
-            <div class="panel-desc">P50, P90, P95, P99 curves across time buckets</div>
+            <div class="panel-title">Xu hướng Độ trễ theo thời gian (Đa phân vị)</div>
+            <div class="panel-desc">Đường P50, P90, P95, P99 theo giờ (Giờ VN · UTC+7)</div>
           </div>
           <div style="display:flex;gap:6px">
-            <span class="badge" style="border-color:var(--cyan);color:var(--cyan)">[P50]</span>
-            <span class="badge" style="border-color:var(--accent);color:var(--accent)">[P90]</span>
-            <span class="badge" style="border-color:var(--warn);color:var(--warn)">[P95]</span>
-            <span class="badge" style="border-color:var(--bad);color:var(--bad)">[P99]</span>
+            <span class="badge" style="border-color:var(--cyan);color:var(--cyan)">P50</span>
+            <span class="badge" style="border-color:var(--accent);color:var(--accent)">P90</span>
+            <span class="badge" style="border-color:var(--warn);color:var(--warn)">P95</span>
+            <span class="badge" style="border-color:var(--bad);color:var(--bad)">P99</span>
           </div>
         </div>
         <div class="chart-box" id="pf-chart-latency-trend"></div>
@@ -788,8 +731,8 @@ svg.chart {
 
       <div class="col-4 panel">
         <div class="panel-header">
-          <div class="panel-title">Latency Distribution</div>
-          <div class="panel-desc">Histogram bins (&lt;1s to &gt;30m)</div>
+          <div class="panel-title">Phân bố Thời gian phản hồi</div>
+          <div class="panel-desc">Phân bố theo khoảng thời gian (&lt; 1s đến &gt; 30m)</div>
         </div>
         <div class="chart-box" id="pf-chart-latency-dist"></div>
       </div>
@@ -797,8 +740,8 @@ svg.chart {
       <div class="col-6 panel">
         <div class="panel-header">
           <div>
-            <div class="panel-title">Latency vs TTFT Correlation</div>
-            <div class="panel-desc">Scatter distribution: X = Latency, Y = TTFT</div>
+            <div class="panel-title">Tương quan Độ trễ vs TTFT</div>
+            <div class="panel-desc">Phân tán: X = Độ trễ tổng, Y = TTFT (phát hiện request treo/chậm)</div>
           </div>
         </div>
         <div class="chart-box" id="pf-chart-scatter"></div>
@@ -806,18 +749,18 @@ svg.chart {
 
       <div class="col-6 panel">
         <div class="panel-header">
-          <div class="panel-title">Executor Engine Performance</div>
+          <div class="panel-title">Hiệu năng Trình thực thi (Executor)</div>
           <div class="panel-desc">OpenAICompat, Antigravity, OpenAI, Claude</div>
         </div>
         <div class="table-wrap">
           <table class="clean-table" id="pf-tbl-executors">
             <thead>
               <tr>
-                <th>Executor Type</th>
+                <th>Trình thực thi</th>
                 <th class="num">Requests</th>
-                <th class="num">Error %</th>
-                <th class="num">P50 Latency</th>
-                <th class="num">P50 TTFT</th>
+                <th class="num">Tỷ lệ lỗi %</th>
+                <th class="num" title="P50 Độ trễ: 50% request nhanh hơn mức này">P50 Độ trễ</th>
+                <th class="num" title="P50 TTFT: Thời gian chờ chữ đầu tiên trung bình">P50 TTFT</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -828,22 +771,22 @@ svg.chart {
       <div class="col-12 panel">
         <div class="panel-header">
           <div>
-            <div class="panel-title">Slowest Requests (Top Outliers)</div>
-            <div class="panel-desc">Click any request row to open Request Detail Drawer</div>
+            <div class="panel-title">Top Request Chậm nhất (Outliers)</div>
+            <div class="panel-desc">Click vào dòng bất kỳ để xem chi tiết request</div>
           </div>
         </div>
         <div class="table-wrap">
           <table class="clean-table" id="pf-tbl-slowest">
             <thead>
               <tr>
-                <th>Timestamp</th>
+                <th>Thời gian (UTC+7)</th>
                 <th>Router Alias</th>
-                <th>Model</th>
+                <th>Model thật</th>
                 <th>Provider</th>
-                <th class="num">Latency</th>
+                <th class="num">Độ trễ</th>
                 <th class="num">TTFT</th>
                 <th class="num">Tokens</th>
-                <th>Status</th>
+                <th>Trạng thái</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -854,44 +797,44 @@ svg.chart {
   </div>
 
   <!-- =========================================================================
-       TAB 4: TOKENS & EFFICIENCY
+       TAB 4: TOKEN & CACHE (TOKENS & EFFICIENCY)
        ========================================================================= -->
   <div id="tab-tokens_efficiency" class="tab-pane" style="display:none">
     <div class="kpi-grid">
       <div class="stat-card">
-        <div class="stat-label">Total Input Tokens</div>
+        <div class="stat-label">Tổng Input Tokens <span class="info-tip" title="Tổng lượng từ/token người dùng nạp vào model (câu hỏi + context)">i</span></div>
         <div class="stat-value" id="te-in-tokens">–</div>
-        <div class="stat-sub">Prompt context tokens</div>
+        <div class="stat-sub">Context prompt nạp vào</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Total Output Tokens</div>
+        <div class="stat-label">Tổng Output Tokens <span class="info-tip" title="Tổng lượng từ/token mà model tạo ra để trả lời">i</span></div>
         <div class="stat-value" id="te-out-tokens">–</div>
-        <div class="stat-sub">Generated output tokens</div>
+        <div class="stat-sub">Tokens model sinh ra</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Total Reasoning Tokens</div>
+        <div class="stat-label">Tổng Reasoning Tokens <span class="info-tip" title="Số token mà các model tư duy (như Claude Thinking, DeepSeek R1...) dùng để suy nghĩ ngầm trước khi trả lời">i</span></div>
         <div class="stat-value" id="te-reasoning-tokens" style="color:var(--purple)">–</div>
-        <div class="stat-sub">Thinking model tokens</div>
+        <div class="stat-sub">Tokens suy nghĩ ngầm</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Total Cached Tokens</div>
+        <div class="stat-label">Tổng Token từ Cache <span class="info-tip" title="Số token được đọc lại từ bộ nhớ đệm (Prompt Cache) — giúp giảm 50%-90% chi phí và tăng tốc độ xử lý">i</span></div>
         <div class="stat-value" id="te-cached-tokens" style="color:var(--ok)">–</div>
-        <div class="stat-sub">Prompt cache hits</div>
+        <div class="stat-sub">Tái sử dụng · Càng nhiều càng giảm tiền</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Requests With Cache</div>
+        <div class="stat-label">Request có dùng Cache <span class="info-tip" title="Số lượt gọi tận dụng được prompt cache (cached_tokens > 0)">i</span></div>
         <div class="stat-value" id="te-cached-reqs">–</div>
-        <div class="stat-sub">Calls using cache</div>
+        <div class="stat-sub">Lượt gọi tận dụng cache</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Cache Hit Rate</div>
+        <div class="stat-label">Tỷ lệ Cache Hit <span class="info-tip" title="Phần trăm số request tận dụng được cache trên tổng số request. Tỷ lệ này càng cao càng tiết kiệm chi phí và chạy nhanh">i</span></div>
         <div class="stat-value" id="te-cache-rate" style="color:var(--ok)">–</div>
-        <div class="stat-sub">Percentage of cached calls</div>
+        <div class="stat-sub">% Có cache · Càng cao càng tiết kiệm & nhanh</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Cache Creation Tokens</div>
+        <div class="stat-label">Cache Creation Tokens <span class="info-tip" title="Số token tạo mới cache (chỉ phát sinh khi client gửi cờ yêu cầu ghi cache rõ ràng)">i</span></div>
         <div class="stat-value" id="te-cache-creation">0</div>
-        <div class="stat-sub">Explicit cache write tokens</div>
+        <div class="stat-sub">Token ghi mới vào cache</div>
       </div>
     </div>
 
@@ -899,12 +842,12 @@ svg.chart {
       <div class="col-8 panel">
         <div class="panel-header">
           <div>
-            <div class="panel-title">Token Volume Over Time</div>
-            <div class="panel-desc">Input Context vs Output Generated Tokens</div>
+            <div class="panel-title">Lưu lượng Token theo thời gian</div>
+            <div class="panel-desc">Input Context vs Output Tokens (Giờ VN · UTC+7)</div>
           </div>
           <div style="display:flex;gap:6px">
-            <span class="badge" style="border-color:var(--purple);color:var(--purple)">[Input]</span>
-            <span class="badge" style="border-color:var(--ok);color:var(--ok)">[Output]</span>
+            <span class="badge" style="border-color:var(--purple);color:var(--purple)">Input</span>
+            <span class="badge" style="border-color:var(--ok);color:var(--ok)">Output</span>
           </div>
         </div>
         <div class="chart-box" id="te-chart-token-trend"></div>
@@ -912,16 +855,16 @@ svg.chart {
 
       <div class="col-4 panel">
         <div class="panel-header">
-          <div class="panel-title">Input Token Distribution</div>
-          <div class="panel-desc">Context size bins (&lt;1K to &gt;400K)</div>
+          <div class="panel-title">Phân bố Kích thước Context</div>
+          <div class="panel-desc">Phân bố độ dài prompt (&lt; 1K đến &gt; 400K)</div>
         </div>
         <div class="chart-box" id="te-chart-token-dist"></div>
       </div>
 
       <div class="col-12 panel">
         <div class="panel-header">
-          <div class="panel-title">Token & Cache Analytics by Model</div>
-          <div class="panel-desc">Breakdown of prompt, output, reasoning and cache hit rates</div>
+          <div class="panel-title">Thống kê Token & Cache theo Model</div>
+          <div class="panel-desc">Chi tiết token, reasoning và tỷ lệ cache hit của từng model</div>
         </div>
         <div class="table-wrap">
           <table class="clean-table" id="te-tbl-model-tokens">
@@ -929,13 +872,13 @@ svg.chart {
               <tr>
                 <th>Model</th>
                 <th class="num">Requests</th>
-                <th class="num">Input Tokens</th>
-                <th class="num">Output Tokens</th>
-                <th class="num">Reasoning</th>
-                <th class="num">Cached Tokens</th>
-                <th class="num">Avg In/Req</th>
-                <th class="num">Avg Out/Req</th>
-                <th class="num">Cache Hit %</th>
+                <th class="num" title="Tổng token context câu hỏi nạp vào">Input Tokens</th>
+                <th class="num" title="Tổng token câu trả lời model sinh ra">Output Tokens</th>
+                <th class="num" title="Token model dùng để suy nghĩ ngầm">Reasoning</th>
+                <th class="num" title="Token đọc lại từ bộ nhớ đệm cache (tiết kiệm chi phí)">Cached Tokens</th>
+                <th class="num" title="Trung bình số token nạp vào cho mỗi request">TB In/Req</th>
+                <th class="num" title="Trung bình số token sinh ra cho mỗi request">TB Out/Req</th>
+                <th class="num" title="Tỷ lệ phần trăm request tận dụng được cache">% Cache Hit</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -945,20 +888,20 @@ svg.chart {
 
       <div class="col-12 panel">
         <div class="panel-header">
-          <div class="panel-title">Reasoning Effort × Performance</div>
-          <div class="panel-desc">Impact of reasoning effort on latency and token metrics</div>
+          <div class="panel-title">Mức suy nghĩ (Reasoning) × Hiệu năng</div>
+          <div class="panel-desc">Tác động của reasoning effort lên độ trễ và tiêu thụ token</div>
         </div>
         <div class="table-wrap">
           <table class="clean-table" id="te-tbl-reasoning-perf">
             <thead>
               <tr>
-                <th>Reasoning Effort</th>
+                <th>Mức suy nghĩ</th>
                 <th class="num">Requests</th>
-                <th class="num">P50 Latency</th>
-                <th class="num">P90 Latency</th>
-                <th class="num">Input Tokens</th>
-                <th class="num">Output Tokens</th>
-                <th class="num">Reasoning Tokens</th>
+                <th class="num" title="P50: 50% request nhanh hơn mức này">P50 Độ trễ</th>
+                <th class="num" title="P90: 90% request nhanh hơn mức này">P90 Độ trễ</th>
+                <th class="num" title="Tổng token context/câu hỏi nạp vào">Input Tokens</th>
+                <th class="num" title="Tổng token câu trả lời sinh ra">Output Tokens</th>
+                <th class="num" title="Tổng token model dùng để suy nghĩ ngầm">Reasoning Tokens</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -969,34 +912,49 @@ svg.chart {
   </div>
 
   <!-- =========================================================================
-       TAB 5: TRA CỨU REQUESTS (Realtime Log & Drawer)
+       TAB 5: TRA CỨU REQUESTS (REALTIME LOG & DRAWER)
        ========================================================================= -->
   <div id="tab-requests_log" class="tab-pane" style="display:none">
     <div class="panel">
-      <div class="panel-header">
+      <div class="panel-header" style="flex-wrap:wrap;gap:8px">
         <div>
           <div class="panel-title">Tra cứu Requests (Realtime Log)</div>
-          <div class="panel-desc">Click any row to open Request Detail Drawer and decode root cause</div>
+          <div class="panel-desc">Click vào bất kỳ dòng nào để xem chi tiết và tự động giải mã nguyên nhân lỗi</div>
         </div>
-        <div style="display:flex;gap:6px">
-          <button class="btn-text" onclick="loadRequestsPage(-1)">Prev</button>
-          <span class="badge" id="req-page-info">Page 1 / 1</span>
-          <button class="btn-text" onclick="loadRequestsPage(1)">Next</button>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <!-- Filter riêng: Thành công / Thất bại -->
+          <select id="reqFilterStatus" class="filter-select" onchange="changeReqStatusFilter(this.value)">
+            <option value="">Kết quả: Tất cả</option>
+            <option value="success">Chỉ Thành công</option>
+            <option value="failed">Chỉ Thất bại</option>
+          </select>
+
+          <!-- Giới hạn số bản ghi: Mặc định 15, 25, 50, 100 -->
+          <select id="reqLimitSelect" class="filter-select" onchange="changeReqLimit(this.value)">
+            <option value="15" selected>Hiển thị: 15 dòng</option>
+            <option value="25">Hiển thị: 25 dòng</option>
+            <option value="50">Hiển thị: 50 dòng</option>
+            <option value="100">Hiển thị: 100 dòng</option>
+          </select>
+
+          <button class="btn-text" onclick="loadRequestsPage(-1)">Trang trước</button>
+          <span class="badge" id="req-page-info">Trang 1 / 1</span>
+          <button class="btn-text" onclick="loadRequestsPage(1)">Trang sau</button>
         </div>
       </div>
       <div class="table-wrap">
         <table class="clean-table" id="tbl-requests">
           <thead>
             <tr>
-              <th>Timestamp</th>
+              <th>Thời gian (UTC+7)</th>
               <th>Router Alias</th>
-              <th>Model</th>
+              <th>Model thật</th>
               <th>Provider</th>
               <th>API Key</th>
-              <th>Effort</th>
-              <th class="num">Latency</th>
+              <th>Mức suy nghĩ</th>
+              <th class="num">Độ trễ</th>
               <th class="num">Tokens</th>
-              <th>Status</th>
+              <th>Kết quả</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -1010,8 +968,8 @@ svg.chart {
 <div class="modal-backdrop" id="modal-detail" onclick="if(event.target===this)closeDetail()">
   <div class="modal-content">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-      <h3 style="font-size:14px;font-weight:700">Request Detail</h3>
-      <button class="btn-text" onclick="closeDetail()">Close</button>
+      <h3 style="font-size:14px;font-weight:700">Chi tiết Request</h3>
+      <button class="btn-text" onclick="closeDetail()">Đóng</button>
     </div>
     <div id="detail-body"></div>
   </div>
@@ -1083,14 +1041,116 @@ function mgmtKeyCandidates() {
   return list;
 }
 
-// ---- theme & preferences ---------------------------------------------------
-function toggleTheme() {
-  var html = document.documentElement;
-  var cur = html.getAttribute("data-theme") || "dark";
-  var next = cur === "dark" ? "light" : "dark";
-  html.setAttribute("data-theme", next);
-  if (typeof localStorage !== "undefined") localStorage.setItem("cpa_theme", next);
-  if (state.rawSummary) renderAllViews();
+// ---- host theme sync & auto-detection ---------------------------------------
+function syncThemeFromHost() {
+  var theme = "dark";
+  try {
+    if (window.parent && window.parent !== window && window.parent.document) {
+      var pDoc = window.parent.document;
+      var pRoot = pDoc.documentElement;
+      var pTheme = (pRoot.getAttribute("data-theme") || pRoot.getAttribute("class") || pDoc.body.className || "").toLowerCase();
+      if (pTheme.indexOf("dark") !== -1 || pTheme.indexOf("black") !== -1) {
+        theme = "dark";
+      } else if (pTheme.indexOf("light") !== -1 || pTheme.indexOf("white") !== -1) {
+        theme = "light";
+      } else {
+        var bg = window.parent.getComputedStyle(pRoot).backgroundColor;
+        if (bg) {
+          var rgb = bg.match(/\d+/g);
+          if (rgb && rgb.length >= 3) {
+            var luma = 0.2126 * parseInt(rgb[0], 10) + 0.7152 * parseInt(rgb[1], 10) + 0.0722 * parseInt(rgb[2], 10);
+            theme = luma < 128 ? "dark" : "light";
+          }
+        }
+      }
+    } else {
+      var saved = localStorage.getItem("theme") || localStorage.getItem("cpa_theme") || localStorage.getItem("color-mode");
+      if (saved === "light" || saved === "dark") {
+        theme = saved;
+      } else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) {
+        theme = "light";
+      }
+    }
+  } catch (e) {
+    if (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) {
+      theme = "light";
+    }
+  }
+
+  var cur = document.documentElement.getAttribute("data-theme");
+  if (cur !== theme) {
+    document.documentElement.setAttribute("data-theme", theme);
+    document.documentElement.style.colorScheme = theme;
+    if (typeof state !== "undefined" && state.rawSummary) renderAllViews();
+  }
+}
+
+function observeHostTheme() {
+  syncThemeFromHost();
+  try {
+    if (window.matchMedia) {
+      window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", syncThemeFromHost);
+    }
+  } catch (e) {}
+  try {
+    if (window.parent && window.parent !== window && window.parent.document) {
+      new MutationObserver(syncThemeFromHost).observe(window.parent.document.documentElement, {
+        attributes: true,
+        attributeFilter: ["class", "data-theme", "style"]
+      });
+    }
+  } catch (e) {}
+  window.addEventListener("storage", function(e) {
+    if (e.key === "theme" || e.key === "cpa_theme" || e.key === "color-mode") {
+      syncThemeFromHost();
+    }
+  });
+  setInterval(syncThemeFromHost, 3000);
+}
+
+// ---- auto-refresh mechanism -------------------------------------------------
+var autoRefreshTimer = null;
+var autoRefreshSeconds = 0;
+
+function changeAutoRefresh(val) {
+  var sec = parseInt(val, 10) || 0;
+  autoRefreshSeconds = sec;
+  try {
+    localStorage.setItem("cpa_auto_refresh", String(sec));
+  } catch (e) {}
+  startAutoRefresh();
+}
+
+function startAutoRefresh() {
+  if (autoRefreshTimer) {
+    clearInterval(autoRefreshTimer);
+    autoRefreshTimer = null;
+  }
+  if (autoRefreshSeconds > 0) {
+    autoRefreshTimer = setInterval(function() {
+      if (document.hidden) return;
+      refreshData();
+    }, autoRefreshSeconds * 1000);
+  }
+}
+
+function initAutoRefresh() {
+  try {
+    var saved = localStorage.getItem("cpa_auto_refresh");
+    if (saved !== null) {
+      var sel = document.getElementById("autoRefreshSelect");
+      if (sel) {
+        sel.value = saved;
+        autoRefreshSeconds = parseInt(saved, 10) || 0;
+      }
+    }
+  } catch (e) {}
+  startAutoRefresh();
+  document.addEventListener("visibilitychange", function() {
+    if (!document.hidden && autoRefreshSeconds > 0) {
+      refreshData();
+    }
+  });
 }
 
 // ---- error-log decode + readable rendering ---------------------------------
@@ -1163,11 +1223,11 @@ function extractHints(msg) {
   if (dm) {
     var t = new Date(dm[1]);
     if (!isNaN(t.getTime())) {
-      hints.push({ label: "Resets At", value: t.toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" }) });
+      hints.push({ label: "Mở lại lúc", value: t.toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" }) });
     }
   }
   var mm = msg.match(/['"]([A-Za-z0-9._-]+)['"]\s+to keep going/i) || msg.match(/Use the paid model ['"]([A-Za-z0-9._-]+)['"]/i);
-  if (mm) hints.push({ label: "Suggested Model", value: mm[1] });
+  if (mm) hints.push({ label: "Model gợi ý", value: mm[1] });
   return hints;
 }
 
@@ -1210,7 +1270,72 @@ function api(path) {
     });
 }
 
-// ---- formatters ------------------------------------------------------------
+// ---- formatters & Timezone UTC+7 -------------------------------------------
+function formatDateTimeExactVN(d) {
+  if (!d) d = new Date();
+  if (typeof d === "string" || typeof d === "number") d = new Date(d);
+  if (isNaN(d.getTime())) return "–";
+  try {
+    var parts = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Ho_Chi_Minh",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false
+    }).formatToParts(d);
+    var map = {};
+    parts.forEach(function(p) { map[p.type] = p.value; });
+    return (map.day || "01") + "/" + (map.month || "01") + "/" + (map.year || "2026") + " " +
+           (map.hour || "00") + ":" + (map.minute || "00") + ":" + (map.second || "00");
+  } catch (e) {
+    return d.toLocaleString();
+  }
+}
+
+function formatTimeVN(ts) {
+  if (!ts) return "–";
+  var d = new Date(ts);
+  if (isNaN(d.getTime())) return ts;
+  return d.toLocaleString("vi-VN", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false
+  });
+}
+
+function formatTimeShortVN(ts) {
+  if (!ts) return "–";
+  var d = new Date(ts);
+  if (isNaN(d.getTime())) return ts;
+  var s = d.toLocaleString("vi-VN", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false
+  });
+  return s;
+}
+
+function formatHourBucketVN(hourStr) {
+  if (!hourStr) return "";
+  var d = new Date(hourStr.length === 13 ? hourStr + ":00:00Z" : hourStr);
+  if (isNaN(d.getTime())) return hourStr;
+  var day = d.toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", month: "2-digit", day: "2-digit" });
+  var hour = d.toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", hour12: false });
+  return day + " " + hour + "h";
+}
+
 function formatDurationS(sec) {
   if (sec === null || sec === undefined || isNaN(sec)) return "–";
   if (sec < 0.001 && sec > 0) return (sec * 1e6).toFixed(0) + "µs";
@@ -1241,22 +1366,27 @@ function esc(str) {
 // ---- state & filter management ---------------------------------------------
 var state = {
   timeRange: "7d",
-  provider: "",
-  model: "",
-  router: "",
-  apiKey: "",
-  attribution: "",
-  effort: "",
-  executor: "",
-  status: "",
-  statusCode: "",
   tab: "overview",
   reqOffset: 0,
-  reqLimit: 50,
+  reqLimit: 15,
+  reqStatus: "",
   rawSummary: null,
   modelSortCol: "calls",
   modelSortAsc: false
 };
+
+function buildFilterQueryParams() {
+  var params = [];
+  var now = new Date();
+  var start = null;
+  if (state.timeRange === "1h") start = new Date(now.getTime() - 1 * 3600 * 1000);
+  else if (state.timeRange === "6h") start = new Date(now.getTime() - 6 * 3600 * 1000);
+  else if (state.timeRange === "24h") start = new Date(now.getTime() - 24 * 3600 * 1000);
+  else if (state.timeRange === "7d") start = new Date(now.getTime() - 7 * 24 * 3600 * 1000);
+
+  if (start) params.push("start=" + encodeURIComponent(start.toISOString()));
+  return params.length ? "&" + params.join("&") : "";
+}
 
 function setTime(r) {
   state.timeRange = r;
@@ -1264,46 +1394,6 @@ function setTime(r) {
     btn.classList.toggle("active", btn.getAttribute("data-time") === r);
   });
   refreshData();
-}
-
-function applyFilters() {
-  state.provider = document.getElementById("fltProvider").value;
-  state.model = document.getElementById("fltModel").value;
-  state.router = document.getElementById("fltRouter").value;
-  state.apiKey = document.getElementById("fltKey").value;
-  state.attribution = document.getElementById("fltAttribution").value;
-  state.effort = document.getElementById("fltEffort").value;
-  state.executor = document.getElementById("fltExecutor").value;
-  state.status = document.getElementById("fltStatus").value;
-  state.statusCode = document.getElementById("fltStatusCode").value;
-  renderAllViews();
-}
-
-function resetFilters() {
-  document.getElementById("fltProvider").value = "";
-  document.getElementById("fltModel").value = "";
-  document.getElementById("fltRouter").value = "";
-  document.getElementById("fltKey").value = "";
-  document.getElementById("fltAttribution").value = "";
-  document.getElementById("fltEffort").value = "";
-  document.getElementById("fltExecutor").value = "";
-  document.getElementById("fltStatus").value = "";
-  document.getElementById("fltStatusCode").value = "";
-  applyFilters();
-}
-
-function drillDown(field, val) {
-  if (field === "provider") {
-    document.getElementById("fltProvider").value = val;
-    state.provider = val;
-  } else if (field === "model") {
-    document.getElementById("fltModel").value = val;
-    state.model = val;
-  } else if (field === "status_code") {
-    document.getElementById("fltStatusCode").value = String(val);
-    state.statusCode = String(val);
-  }
-  renderAllViews();
 }
 
 function switchTab(tabId) {
@@ -1319,44 +1409,20 @@ function switchTab(tabId) {
 }
 
 function refreshData() {
-  var now = new Date();
-  var start = null;
-  if (state.timeRange === "1h") start = new Date(now.getTime() - 1 * 3600 * 1000);
-  else if (state.timeRange === "6h") start = new Date(now.getTime() - 6 * 3600 * 1000);
-  else if (state.timeRange === "24h") start = new Date(now.getTime() - 24 * 3600 * 1000);
-  else if (state.timeRange === "7d") start = new Date(now.getTime() - 7 * 24 * 3600 * 1000);
-
-  var url = "/usage/summary?source=router";
-  if (start) url += "&start=" + encodeURIComponent(start.toISOString());
+  var url = "/usage/summary?source=router" + buildFilterQueryParams();
 
   api(url).then(function(data) {
     state.rawSummary = data;
-    populateFilterDropdowns(data);
     renderAllViews();
+    if (state.tab === "requests_log") {
+      loadRequestsPage(0);
+    }
+    var lu = document.getElementById("lastUpdated");
+    if (lu) {
+      lu.textContent = "Cập nhật lúc: " + formatDateTimeExactVN(new Date());
+    }
   }).catch(function(err) {
     console.error("Summary fetch error:", err);
-  });
-}
-
-function populateFilterDropdowns(data) {
-  populateSelect("fltProvider", data.by_provider, "Provider");
-  populateSelect("fltModel", data.by_model, "Model");
-  populateSelect("fltRouter", data.by_alias, "Router");
-  populateSelect("fltKey", data.by_api_key, "API Key");
-  populateSelect("fltExecutor", data.by_executor, "Executor");
-}
-
-function populateSelect(id, items, label) {
-  var sel = document.getElementById(id);
-  var cur = sel.value;
-  sel.innerHTML = '<option value="">' + label + ': All</option>';
-  if (!items) return;
-  items.forEach(function(it) {
-    var opt = document.createElement("option");
-    opt.value = it.name;
-    opt.textContent = it.name + " (" + n(it.calls) + ")";
-    if (it.name === cur) opt.selected = true;
-    sel.appendChild(opt);
   });
 }
 
@@ -1370,22 +1436,25 @@ function renderAllViews() {
 }
 
 // ==========================================================================
-// RENDER TAB 1: OVERVIEW
+// RENDER TAB 1: OVERVIEW (TỔNG QUAN)
 // ==========================================================================
 function renderOverview(d) {
   var t = d.totals || {};
   document.getElementById("ov-total").textContent = n(t.calls);
   document.getElementById("ov-success").textContent = n(t.success || (t.calls - t.failed));
   document.getElementById("ov-failed").textContent = n(t.failed);
-  document.getElementById("ov-error-rate").textContent = (t.error_rate !== undefined ? t.error_rate.toFixed(1) : ((t.failed/t.calls)*100).toFixed(1)) + "%";
-  document.getElementById("ov-latency").textContent = formatDurationS(t.p50_latency_s) + " / " + formatDurationS(t.p90_latency_s);
-  document.getElementById("ov-ttft").textContent = formatDurationS(t.p50_ttft_s);
+  var errRate = t.error_rate !== undefined ? t.error_rate : (t.calls ? ((t.failed / t.calls) * 100) : 0);
+  var elErr = document.getElementById("ov-error-rate");
+  if (elErr) {
+    elErr.textContent = errRate.toFixed(1) + "%";
+    elErr.style.color = errRate > 1 ? "var(--bad)" : (errRate > 0 ? "var(--warn)" : "var(--ok)");
+  }
   document.getElementById("ov-in-tokens").textContent = nTok(t.input_tokens);
   document.getElementById("ov-out-tokens").textContent = nTok(t.output_tokens);
 
   renderTimelineArea("ov-chart-volume", d.by_hour, [
-    { key: "success", label: "Success", color: "#10b981" },
-    { key: "failed", label: "Failed", color: "#f43f5e" }
+    { key: "success", label: "Thành công", color: "#10b981" },
+    { key: "failed", label: "Thất bại", color: "#f43f5e" }
   ]);
 
   renderHorizontalBar("ov-chart-errors", (d.status_codes || []).map(function(s) {
@@ -1396,7 +1465,7 @@ function renderOverview(d) {
   var html = "";
   (d.by_provider || []).forEach(function(p) {
     html += '<tr>' +
-      '<td><span class="clickable-item" onclick="drillDown(\'provider\',\'' + esc(p.name) + '\')">' + esc(p.name) + '</span></td>' +
+      '<td><strong>' + esc(p.name) + '</strong></td>' +
       '<td class="num">' + n(p.calls) + '</td>' +
       '<td class="num" style="color:var(--ok)">' + n(p.success || (p.calls - p.failed)) + '</td>' +
       '<td class="num" style="color:' + (p.failed ? 'var(--bad)' : 'var(--text)') + '">' + n(p.failed) + '</td>' +
@@ -1409,12 +1478,12 @@ function renderOverview(d) {
 }
 
 // ==========================================================================
-// RENDER TAB 2: REQUESTS & MODELS
+// RENDER TAB 2: REQUESTS & MODELS (LƯU LƯỢNG & MODEL)
 // ==========================================================================
 function renderRequestsModels(d) {
-  renderHorizontalBar("rm-chart-provider", d.by_provider || [], "#6366f1", "provider");
-  renderHorizontalBar("rm-chart-router", d.by_alias || [], "#a855f7", "router");
-  renderHorizontalBar("rm-chart-attr", (d.by_attribution || []).concat(d.by_api_key || []).slice(0, 8), "#06b6d4");
+  renderHorizontalBar("rm-chart-provider", d.by_provider || [], "#6366f1");
+  renderHorizontalBar("rm-chart-router", d.by_alias || [], "#a855f7");
+  renderHorizontalBar("rm-chart-keys", (d.by_api_key || []).slice(0, 8), "#06b6d4");
 
   renderModelPerfTable(d.by_model || []);
 
@@ -1424,7 +1493,7 @@ function renderRequestsModels(d) {
   (d.router_mappings || []).slice(0, 15).forEach(function(m) {
     mapHtml += '<tr><td><strong>' + esc(m.alias || 'Direct / No Router') + '</strong></td><td>' + esc(m.model) + '</td><td class="num">' + n(m.calls) + '</td><td class="num">' + ((m.calls / tCalls)*100).toFixed(1) + '%</td></tr>';
   });
-  mapTbody.innerHTML = mapHtml || '<tr><td colspan="4" style="text-align:center;color:var(--text-muted)">No routing records</td></tr>';
+  mapTbody.innerHTML = mapHtml || '<tr><td colspan="4" style="text-align:center;color:var(--text-muted)">Không có dữ liệu mapping</td></tr>';
 }
 
 function renderModelPerfTable(models) {
@@ -1440,7 +1509,7 @@ function renderModelPerfTable(models) {
   list.forEach(function(m) {
     html += '<tr>' +
       '<td>' + esc(m.sub || '–') + '</td>' +
-      '<td><span class="clickable-item" onclick="drillDown(\'model\',\'' + esc(m.name) + '\')">' + esc(m.name) + '</span></td>' +
+      '<td><strong>' + esc(m.name) + '</strong></td>' +
       '<td class="num">' + n(m.calls) + '</td>' +
       '<td class="num" style="color:' + (m.failed ? 'var(--bad)' : 'var(--text)') + '">' + n(m.failed) + '</td>' +
       '<td class="num" style="color:' + (m.failed ? 'var(--bad)' : 'var(--ok)') + '">' + (m.error_rate||0).toFixed(1) + '%</td>' +
@@ -1460,7 +1529,7 @@ function sortModelTable(col) {
 }
 
 // ==========================================================================
-// RENDER TAB 3: PERFORMANCE
+// RENDER TAB 3: PERFORMANCE (HIỆU NĂNG & ĐỘ TRỄ)
 // ==========================================================================
 function renderPerformance(d) {
   var t = d.totals || {};
@@ -1501,7 +1570,7 @@ function renderPerformance(d) {
   (d.slowest_requests || []).slice(0, 15).forEach(function(r) {
     var statusBadge = r.failed ? '<span class="badge badge-bad">HTTP ' + r.failure_status_code + '</span>' : '<span class="badge badge-ok">OK</span>';
     slHtml += '<tr style="cursor:pointer" onclick=\'showDetail(' + JSON.stringify(r) + ')\'>' +
-      '<td>' + (r.timestamp ? r.timestamp.slice(5, 19).replace('T', ' ') : '–') + '</td>' +
+      '<td>' + formatTimeShortVN(r.timestamp) + '</td>' +
       '<td><strong>' + esc(r.alias || 'Direct / No Router') + '</strong></td>' +
       '<td>' + esc(r.model) + '</td>' +
       '<td>' + esc(r.provider) + '</td>' +
@@ -1515,7 +1584,7 @@ function renderPerformance(d) {
 }
 
 // ==========================================================================
-// RENDER TAB 4: TOKENS & EFFICIENCY
+// RENDER TAB 4: TOKENS & EFFICIENCY (TOKEN & CACHE)
 // ==========================================================================
 function renderTokensEfficiency(d) {
   var t = d.totals || {};
@@ -1528,8 +1597,8 @@ function renderTokensEfficiency(d) {
   document.getElementById("te-cache-rate").textContent = hitRate;
 
   renderTimelineArea("te-chart-token-trend", d.by_hour, [
-    { key: "input_tokens", label: "Input", color: "#a855f7" },
-    { key: "output_tokens", label: "Output", color: "#10b981" }
+    { key: "input_tokens", label: "Input Context", color: "#a855f7" },
+    { key: "output_tokens", label: "Output Tokens", color: "#10b981" }
   ]);
 
   renderHistogram("te-chart-token-dist", d.token_distribution || [], "#a855f7");
@@ -1571,8 +1640,20 @@ function renderTokensEfficiency(d) {
 }
 
 // ==========================================================================
-// RENDER TAB 5: REQUESTS LOG & DETAIL DRAWER
+// RENDER TAB 5: TRA CỨU REQUESTS (REALTIME LOG & DRAWER)
 // ==========================================================================
+function changeReqLimit(val) {
+  state.reqLimit = parseInt(val, 10) || 15;
+  state.reqOffset = 0;
+  loadRequestsPage(0);
+}
+
+function changeReqStatusFilter(val) {
+  state.reqStatus = val || "";
+  state.reqOffset = 0;
+  loadRequestsPage(0);
+}
+
 function loadRequests() {
   loadRequestsPage(0);
 }
@@ -1582,16 +1663,10 @@ function loadRequestsPage(delta) {
   else if (delta === 0) state.reqOffset = 0;
   else if (delta === -1) state.reqOffset = Math.max(0, state.reqOffset - state.reqLimit);
 
-  var url = "/usage/requests?source=router&limit=" + state.reqLimit + "&offset=" + state.reqOffset;
-  if (state.provider) url += "&provider=" + encodeURIComponent(state.provider);
-  if (state.router) url += "&alias=" + encodeURIComponent(state.router);
-  if (state.model) url += "&model=" + encodeURIComponent(state.model);
-  if (state.apiKey) url += "&api_key=" + encodeURIComponent(state.apiKey);
-  if (state.attribution) url += "&attribution=" + encodeURIComponent(state.attribution);
-  if (state.effort) url += "&reasoning_effort=" + encodeURIComponent(state.effort);
-  if (state.executor) url += "&executor=" + encodeURIComponent(state.executor);
-  if (state.status) url += "&result=" + encodeURIComponent(state.status);
-  if (state.statusCode) url += "&status_code=" + encodeURIComponent(state.statusCode);
+  var url = "/usage/requests?source=router&limit=" + state.reqLimit + "&offset=" + state.reqOffset + buildFilterQueryParams();
+  if (state.reqStatus) {
+    url += "&result=" + encodeURIComponent(state.reqStatus);
+  }
 
   api(url).then(function(page) {
     var rows = page.rows || [];
@@ -1600,7 +1675,7 @@ function loadRequestsPage(delta) {
     rows.forEach(function(r) {
       var statusBadge = r.failed ? '<span class="badge badge-bad">HTTP ' + r.failure_status_code + '</span>' : '<span class="badge badge-ok">OK</span>';
       html += '<tr style="cursor:pointer" onclick=\'showDetail(' + JSON.stringify(r) + ')\'>' +
-        '<td>' + (r.timestamp ? r.timestamp.slice(5, 19).replace('T', ' ') : '–') + '</td>' +
+        '<td>' + formatTimeShortVN(r.timestamp) + '</td>' +
         '<td><strong>' + esc(r.alias || 'Direct / No Router') + '</strong></td>' +
         '<td>' + esc(r.model) + '</td>' +
         '<td>' + esc(r.provider) + '</td>' +
@@ -1611,10 +1686,10 @@ function loadRequestsPage(delta) {
         '<td>' + statusBadge + '</td>' +
         '</tr>';
     });
-    tbody.innerHTML = html || '<tr><td colspan="9" style="text-align:center;color:var(--text-muted)">No matching records</td></tr>';
+    tbody.innerHTML = html || '<tr><td colspan="9" style="text-align:center;color:var(--text-muted)">Không có bản ghi nào khớp bộ lọc</td></tr>';
     var pageNum = Math.floor(state.reqOffset / state.reqLimit) + 1;
     var totalPages = Math.ceil((page.total || 0) / state.reqLimit) || 1;
-    document.getElementById("req-page-info").textContent = "Page " + pageNum + " / " + totalPages + " (" + n(page.total) + " requests)";
+    document.getElementById("req-page-info").textContent = "Trang " + pageNum + " / " + totalPages + " (" + n(page.total) + " requests)";
   });
 }
 
@@ -1623,21 +1698,21 @@ function showDetail(r) {
   var body = document.getElementById("detail-body");
   var statusBadge = r.failed ? '<span class="badge badge-bad">FAILED HTTP ' + r.failure_status_code + '</span>' : '<span class="badge badge-ok">SUCCESS 200 OK</span>';
 
-  var html = '<div class="detail-row"><div class="detail-k">Status</div><div class="detail-v">' + statusBadge + '</div></div>' +
-    '<div class="detail-row"><div class="detail-k">Timestamp</div><div class="detail-v">' + esc(r.timestamp) + '</div></div>' +
+  var html = '<div class="detail-row"><div class="detail-k">Trạng thái</div><div class="detail-v">' + statusBadge + '</div></div>' +
+    '<div class="detail-row"><div class="detail-k">Thời gian (UTC+7)</div><div class="detail-v">' + formatTimeVN(r.timestamp) + '</div></div>' +
     '<div class="detail-row"><div class="detail-k">Sequence ID</div><div class="detail-v">#' + (r.sequence || r.id) + '</div></div>' +
-    '<div class="detail-row"><div class="detail-k">Router Model</div><div class="detail-v"><strong>' + esc(r.alias || 'Direct / No Router') + '</strong></div></div>' +
-    '<div class="detail-row"><div class="detail-k">Provider Model</div><div class="detail-v">' + esc(r.model) + '</div></div>' +
+    '<div class="detail-row"><div class="detail-k">Router Alias</div><div class="detail-v"><strong>' + esc(r.alias || 'Direct / No Router') + '</strong></div></div>' +
+    '<div class="detail-row"><div class="detail-k">Model thật</div><div class="detail-v">' + esc(r.model) + '</div></div>' +
     '<div class="detail-row"><div class="detail-k">Provider</div><div class="detail-v">' + esc(r.provider) + '</div></div>' +
     '<div class="detail-row"><div class="detail-k">API Key</div><div class="detail-v"><code>' + esc(r.api_key) + '</code></div></div>' +
-    '<div class="detail-row"><div class="detail-k">Attribution</div><div class="detail-v"><span class="badge">' + esc(r.source || 'unattributed') + '</span></div></div>' +
-    '<div class="detail-row"><div class="detail-k">Reasoning / Tier</div><div class="detail-v">' + esc(r.reasoning_effort || 'Not Specified') + ' · Tier: ' + esc(r.service_tier || 'auto') + '</div></div>' +
-    '<div class="detail-row"><div class="detail-k">Executor</div><div class="detail-v">' + esc(r.executor_type || 'OpenAICompat') + '</div></div>' +
-    '<div class="detail-row"><div class="detail-k">Latency / TTFT</div><div class="detail-v">' + formatDurationS(r.latency_ms/1000) + ' (TTFT: ' + formatDurationS(r.ttft_ms/1000) + ')</div></div>' +
+    '<div class="detail-row"><div class="detail-k">Đường đi (Attribution)</div><div class="detail-v"><span class="badge">' + esc(r.source || 'unattributed') + '</span></div></div>' +
+    '<div class="detail-row"><div class="detail-k">Mức suy nghĩ / Tier</div><div class="detail-v">' + esc(r.reasoning_effort || 'Not Specified') + ' · Tier: ' + esc(r.service_tier || 'auto') + '</div></div>' +
+    '<div class="detail-row"><div class="detail-k">Trình thực thi</div><div class="detail-v">' + esc(r.executor_type || 'OpenAICompat') + '</div></div>' +
+    '<div class="detail-row"><div class="detail-k">Độ trễ / TTFT</div><div class="detail-v">' + formatDurationS(r.latency_ms/1000) + ' (TTFT: ' + formatDurationS(r.ttft_ms/1000) + ')</div></div>' +
     '<div class="detail-row"><div class="detail-k">Tokens</div><div class="detail-v">Input: ' + n(r.tokens.input_tokens) + ' · Output: ' + n(r.tokens.output_tokens) + ' · Reasoning: ' + n(r.tokens.reasoning_tokens) + ' · Cache: ' + n(r.tokens.cached_tokens) + '</div></div>';
 
   if (r.failed) {
-    html += '<div id="drawer-error-log" style="margin-top:10px"><span class="badge badge-warn">Searching error logs…</span></div>';
+    html += '<div id="drawer-error-log" style="margin-top:10px"><span class="badge badge-warn">Đang tìm error log…</span></div>';
   }
   body.innerHTML = html;
   modal.style.display = "flex";
@@ -1657,7 +1732,7 @@ function loadErrorLogForDetail(r) {
   var ts = r.timestamp || "";
   api("/error-log?ts=" + encodeURIComponent(ts) + "&status=" + (r.failure_status_code || "")).then(function(res) {
     if (!res.files || !res.files.length) {
-      holder.innerHTML = '<div class="note-callout">No matching error log files found within ±100s of this request.</div>';
+      holder.innerHTML = '<div class="note-callout">Không tìm thấy error log nào trong ±100s quanh request này.</div>';
       return;
     }
     var first = res.files[0].name;
@@ -1667,23 +1742,23 @@ function loadErrorLogForDetail(r) {
       var err = parseCpaError(decoded);
 
       var logHtml = '<div class="error-cause-card">' +
-        '<div class="error-cause-title">Root Cause (Decoded)</div>';
-      if (err.code) logHtml += '<div class="detail-row"><div class="detail-k">Error Code</div><div class="detail-v"><code>' + esc(err.code) + '</code></div></div>';
-      if (err.type) logHtml += '<div class="detail-row"><div class="detail-k">Error Type</div><div class="detail-v">' + esc(err.type) + '</div></div>';
-      if (err.message) logHtml += '<div class="detail-row"><div class="detail-k">Details</div><div class="detail-v" style="color:var(--text)">' + esc(err.message) + '</div></div>';
+        '<div class="error-cause-title">Nguyên nhân thất bại (Bóc tách tự động)</div>';
+      if (err.code) logHtml += '<div class="detail-row"><div class="detail-k">Mã lỗi</div><div class="detail-v"><code>' + esc(err.code) + '</code></div></div>';
+      if (err.type) logHtml += '<div class="detail-row"><div class="detail-k">Loại lỗi</div><div class="detail-v">' + esc(err.type) + '</div></div>';
+      if (err.message) logHtml += '<div class="detail-row"><div class="detail-k">Chi tiết</div><div class="detail-v" style="color:var(--text)">' + esc(err.message) + '</div></div>';
       extractHints(err.message).forEach(function(h) {
         logHtml += '<div class="detail-row"><div class="detail-k" style="color:var(--ok)">' + esc(h.label) + '</div><div class="detail-v" style="color:var(--ok);font-weight:600">' + esc(h.value) + '</div></div>';
       });
       if (err.trace) logHtml += '<div class="detail-row"><div class="detail-k">CPA Trace</div><div class="detail-v"><code>' + esc(err.trace) + '</code></div></div>';
       logHtml += '</div>';
 
-      logHtml += '<details style="margin-top:8px"><summary style="cursor:pointer;font-size:11px;color:var(--text-muted)">View Raw CPA Log</summary>' +
+      logHtml += '<details style="margin-top:8px"><summary style="cursor:pointer;font-size:11px;color:var(--text-muted)">Xem Raw CPA Log</summary>' +
         '<pre style="margin-top:6px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;font-size:10px;max-height:220px;overflow:auto;white-space:pre-wrap;word-break:break-all">' + esc(decoded) + '</pre></details>';
 
       holder.innerHTML = logHtml;
     });
   }).catch(function(e) {
-    holder.innerHTML = '<div class="note-callout">Unable to read error log: ' + esc(e.message) + '</div>';
+    holder.innerHTML = '<div class="note-callout">Không đọc được error log: ' + esc(e.message) + '</div>';
   });
 }
 
@@ -1694,7 +1769,7 @@ function renderTimelineArea(containerId, data, series) {
   var box = document.getElementById(containerId);
   if (!box) return;
   if (!data || !data.length) {
-    box.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:190px;color:var(--text-muted)">No data</div>';
+    box.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:190px;color:var(--text-muted)">Không có dữ liệu</div>';
     return;
   }
   var W = box.clientWidth || 600, H = 190, pL = 40, pR = 15, pT = 15, pB = 25;
@@ -1732,14 +1807,14 @@ function renderTimelineArea(containerId, data, series) {
     svg += '<path d="' + dPath + '" fill="none" stroke="' + s.color + '" stroke-width="2"/>';
 
     points.forEach(function(p) {
-      svg += '<circle cx="' + p.x + '" cy="' + p.y + '" r="2.5" fill="' + s.color + '" onmouseenter="showTooltip(event, \'' + esc(p.label) + ': ' + (p.val < 10 ? p.val.toFixed(2)+'s' : n(p.val)) + ' (' + s.label + ')\')" onmouseleave="hideTooltip()"/>';
+      svg += '<circle cx="' + p.x + '" cy="' + p.y + '" r="2.5" fill="' + s.color + '" onmouseenter="showTooltip(event, \'' + esc(formatHourBucketVN(p.label)) + ': ' + (p.val < 10 ? p.val.toFixed(2)+'s' : n(p.val)) + ' (' + s.label + ')\')" onmouseleave="hideTooltip()"/>';
     });
   });
 
   var step = Math.max(1, Math.floor(data.length / 5));
   for (var i = 0; i < data.length; i += step) {
     var x = pL + cW * (i / (data.length - 1 || 1));
-    var lbl = data[i].hour.slice(5, 13);
+    var lbl = formatHourBucketVN(data[i].hour);
     svg += '<text x="' + x + '" y="' + (H - 6) + '" fill="var(--text-muted)" font-size="9" text-anchor="middle" font-family="var(--mono)">' + esc(lbl) + '</text>';
   }
 
@@ -1747,25 +1822,24 @@ function renderTimelineArea(containerId, data, series) {
   box.innerHTML = svg;
 }
 
-function renderHorizontalBar(containerId, items, color, drillField) {
+function renderHorizontalBar(containerId, items, color) {
   var box = document.getElementById(containerId);
   if (!box) return;
   if (!items || !items.length) {
-    box.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:190px;color:var(--text-muted)">No data</div>';
+    box.innerHTML = '<div style=\"display:flex;align-items:center;justify-content:center;height:190px;color:var(--text-muted)\">Không có dữ liệu</div>';
     return;
   }
   var max = items[0].calls || 1;
-  var html = '<div style="display:flex;flex-direction:column;gap:7px;padding:4px 0">';
+  var html = '<div style=\"display:flex;flex-direction:column;gap:7px;padding:4px 0\">';
   items.slice(0, 8).forEach(function(it) {
     var pct = ((it.calls / max) * 100).toFixed(1);
-    var clickAttr = drillField ? 'onclick="drillDown(\'' + drillField + '\',\'' + esc(it.val || it.name) + '\')"' : '';
     html += '<div>' +
-      '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px">' +
-        '<span class="' + (drillField ? 'clickable-item' : '') + '" ' + clickAttr + ' style="font-weight:600">' + esc(it.name) + '</span>' +
-        '<span style="color:var(--text-muted);font-family:var(--mono)">' + n(it.calls) + '</span>' +
+      '<div style=\"display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px\">' +
+        '<span style=\"font-weight:600\">' + esc(it.name) + '</span>' +
+        '<span style=\"color:var(--text-muted);font-family:var(--mono)\">' + n(it.calls) + '</span>' +
       '</div>' +
-      '<div style="height:5px;background:var(--bg-subtle);border-radius:99px;overflow:hidden">' +
-        '<div style="width:' + pct + '%;height:100%;background:' + color + ';border-radius:99px"></div>' +
+      '<div style=\"height:5px;background:var(--bg-subtle);border-radius:99px;overflow:hidden\">' +
+        '<div style=\"width:' + pct + '%;height:100%;background:' + color + ';border-radius:99px\"></div>' +
       '</div></div>';
   });
   html += '</div>';
@@ -1782,9 +1856,10 @@ function renderHistogram(containerId, buckets, color) {
   var html = '<div style="display:flex;flex-direction:column;gap:6px;padding:4px 0">';
   buckets.forEach(function(b) {
     var pct = ((b.calls / max) * 100).toFixed(1);
+    var cleanLabel = decodeHtmlEntities(String(b.label || ''));
     html += '<div>' +
       '<div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:2px">' +
-        '<span style="font-family:var(--mono);color:var(--text)">' + esc(b.label) + '</span>' +
+        '<span style="font-family:var(--mono);color:var(--text)">' + esc(cleanLabel) + '</span>' +
         '<span style="color:var(--text-muted);font-family:var(--mono)">' + n(b.calls) + '</span>' +
       '</div>' +
       '<div style="height:5px;background:var(--bg-subtle);border-radius:99px;overflow:hidden">' +
@@ -1799,7 +1874,7 @@ function renderScatterPlot(containerId, points) {
   var box = document.getElementById(containerId);
   if (!box) return;
   if (!points || !points.length) {
-    box.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:190px;color:var(--text-muted)">No points</div>';
+    box.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:190px;color:var(--text-muted)">Không có điểm đo</div>';
     return;
   }
   var W = box.clientWidth || 450, H = 190, pL = 40, pR = 15, pT = 15, pB = 25;
@@ -1821,10 +1896,10 @@ function renderScatterPlot(containerId, points) {
     var x = pL + cW * Math.min(1, p.latency_s / maxLat);
     var y = pT + cH * (1 - Math.min(1, p.ttft_s / maxTTFT));
     var color = p.failed ? "var(--bad)" : "var(--accent)";
-    svg += '<circle cx="' + x + '" cy="' + y + '" r="3" fill="' + color + '" fill-opacity="0.6" onmouseenter="showTooltip(event, \'' + esc(p.model) + ' | Lat: ' + p.latency_s + 's, TTFT: ' + p.ttft_s + 's\')" onmouseleave="hideTooltip()"/>';
+    svg += '<circle cx="' + x + '" cy="' + y + '" r="3" fill="' + color + '" fill-opacity="0.6" onmouseenter="showTooltip(event, \'' + esc(p.model) + ' | Độ trễ: ' + p.latency_s + 's, TTFT: ' + p.ttft_s + 's\')" onmouseleave="hideTooltip()"/>';
   });
 
-  svg += '<text x="' + (W - pR) + '" y="' + (H - 6) + '" fill="var(--text-muted)" font-size="9" text-anchor="end">Latency →</text>';
+  svg += '<text x="' + (W - pR) + '" y="' + (H - 6) + '" fill="var(--text-muted)" font-size="9" text-anchor="end">Độ trễ →</text>';
   svg += '<text x="' + (pL + 4) + '" y="' + (pT + 8) + '" fill="var(--text-muted)" font-size="9">↑ TTFT</text>';
   svg += '</svg>';
   box.innerHTML = svg;
@@ -1843,8 +1918,8 @@ function hideTooltip() {
 }
 
 document.addEventListener("DOMContentLoaded", function() {
-  var savedTheme = localStorage.getItem("cpa_theme");
-  if (savedTheme) document.documentElement.setAttribute("data-theme", savedTheme);
+  observeHostTheme();
+  initAutoRefresh();
   refreshData();
 });
 </script>

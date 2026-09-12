@@ -440,10 +440,9 @@ func boolToInt(value bool) int {
 
 // ---- dashboard queries ------------------------------------------------------
 
-// rangeWhere builds the WHERE clause for a time range. It returns the clause
-// (empty when unbounded) and the extended argument slice.
-func rangeWhere(rng QueryRange, args []any) (string, []any) {
-	where := make([]string, 0, 2)
+// filterWhere builds the WHERE clause for a time range and optional PageFilter.
+func filterWhere(rng QueryRange, filter PageFilter, args []any) (string, []any) {
+	where := make([]string, 0, 8)
 	if rng.Start != nil && !rng.Start.IsZero() {
 		where = append(where, "timestamp >= ?")
 		args = append(args, formatTimestamp(*rng.Start))
@@ -451,6 +450,26 @@ func rangeWhere(rng QueryRange, args []any) (string, []any) {
 	if rng.End != nil && !rng.End.IsZero() {
 		where = append(where, "timestamp < ?")
 		args = append(args, formatTimestamp(*rng.End))
+	}
+	if filter.Model != "" {
+		where = append(where, "(model = ? OR alias = ?)")
+		args = append(args, filter.Model, filter.Model)
+	}
+	if filter.Provider != "" {
+		where = append(where, "provider = ?")
+		args = append(args, filter.Provider)
+	}
+	if filter.APIKey != "" {
+		where = append(where, "api_key = ?")
+		args = append(args, filter.APIKey)
+	}
+	if filter.Failed != nil {
+		where = append(where, "failed = ?")
+		args = append(args, boolToInt(*filter.Failed))
+	}
+	if filter.StatusCode > 0 {
+		where = append(where, "failure_status_code = ?")
+		args = append(args, filter.StatusCode)
 	}
 	if len(where) == 0 {
 		return "", args
@@ -462,7 +481,7 @@ func rangeWhere(rng QueryRange, args []any) (string, []any) {
 // hourly trend, per-model, per-alias, per-provider, per-api-key groupings and
 // failure status-code counts. Aggregation happens in SQL so the payload stays
 // small no matter how many raw records exist.
-func (s *SQLiteStore) Summary(ctx context.Context, rng QueryRange) (*UsageSummary, error) {
+func (s *SQLiteStore) Summary(ctx context.Context, rng QueryRange, filter ...PageFilter) (*UsageSummary, error) {
 	summary := &UsageSummary{
 		Start:       rng.Start,
 		End:         rng.End,
@@ -476,23 +495,27 @@ func (s *SQLiteStore) Summary(ctx context.Context, rng QueryRange) (*UsageSummar
 	if s == nil || s.db == nil {
 		return summary, nil
 	}
-	if err := s.fillTotals(ctx, rng, summary); err != nil {
+	var f PageFilter
+	if len(filter) > 0 {
+		f = filter[0]
+	}
+	if err := s.fillTotals(ctx, rng, f, summary); err != nil {
 		return nil, err
 	}
-	if err := s.fillGrouped(ctx, rng, summary); err != nil {
+	if err := s.fillGrouped(ctx, rng, f, summary); err != nil {
 		return nil, err
 	}
-	if err := s.fillByHour(ctx, rng, summary); err != nil {
+	if err := s.fillByHour(ctx, rng, f, summary); err != nil {
 		return nil, err
 	}
-	if err := s.fillStatusCodes(ctx, rng, summary); err != nil {
+	if err := s.fillStatusCodes(ctx, rng, f, summary); err != nil {
 		return nil, err
 	}
 	return summary, nil
 }
 
-func (s *SQLiteStore) fillTotals(ctx context.Context, rng QueryRange, summary *UsageSummary) error {
-	where, args := rangeWhere(rng, nil)
+func (s *SQLiteStore) fillTotals(ctx context.Context, rng QueryRange, filter PageFilter, summary *UsageSummary) error {
+	where, args := filterWhere(rng, filter, nil)
 	query := `SELECT COUNT(*), COALESCE(SUM(failed),0),
 		COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0),
 		COALESCE(SUM(reasoning_tokens),0), COALESCE(SUM(cached_tokens),0),
@@ -509,7 +532,7 @@ func (s *SQLiteStore) fillTotals(ctx context.Context, rng QueryRange, summary *U
 // falls back to provider, then "unknown".
 const groupKeySQL = "CASE WHEN TRIM(api_key) != '' THEN api_key WHEN TRIM(provider) != '' THEN provider ELSE 'unknown' END"
 
-func (s *SQLiteStore) fillGrouped(ctx context.Context, rng QueryRange, summary *UsageSummary) error {
+func (s *SQLiteStore) fillGrouped(ctx context.Context, rng QueryRange, filter PageFilter, summary *UsageSummary) error {
 	type dim struct {
 		selectExpr string
 		subExpr    string
@@ -525,7 +548,7 @@ func (s *SQLiteStore) fillGrouped(ctx context.Context, rng QueryRange, summary *
 		{selectExpr: groupKeySQL, subExpr: "", target: &summary.ByAPIKey, hasSub: false},
 	}
 	for _, d := range dims {
-		where, args := rangeWhere(rng, nil)
+		where, args := filterWhere(rng, filter, nil)
 		query := "SELECT " + d.selectExpr
 		if d.hasSub {
 			query += ", " + d.subExpr
@@ -566,8 +589,8 @@ func (s *SQLiteStore) fillGrouped(ctx context.Context, rng QueryRange, summary *
 	return nil
 }
 
-func (s *SQLiteStore) fillByHour(ctx context.Context, rng QueryRange, summary *UsageSummary) error {
-	where, args := rangeWhere(rng, nil)
+func (s *SQLiteStore) fillByHour(ctx context.Context, rng QueryRange, filter PageFilter, summary *UsageSummary) error {
+	where, args := filterWhere(rng, filter, nil)
 	// Timestamps are stored as "YYYY-MM-DDTHH:MM:SS.nnnnnnnnnZ" (UTC), so the
 	// first 13 characters are the UTC hour bucket.
 	query := `SELECT substr(timestamp,1,13), COUNT(*), COALESCE(SUM(failed),0),
@@ -590,10 +613,10 @@ func (s *SQLiteStore) fillByHour(ctx context.Context, rng QueryRange, summary *U
 	return rows.Err()
 }
 
-func (s *SQLiteStore) fillStatusCodes(ctx context.Context, rng QueryRange, summary *UsageSummary) error {
-	where, args := rangeWhere(rng, nil)
+func (s *SQLiteStore) fillStatusCodes(ctx context.Context, rng QueryRange, filter PageFilter, summary *UsageSummary) error {
+	where, args := filterWhere(rng, filter, nil)
 	if where != "" {
-		// rangeWhere already yields " WHERE <cond>"; append the extra
+		// filterWhere already yields " WHERE <cond>"; append the extra
 		// conditions to the existing AND list.
 		where += " AND failed = 1 AND failure_status_code > 0"
 	} else {

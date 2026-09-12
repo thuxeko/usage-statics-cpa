@@ -424,17 +424,14 @@ func parsePageFilter(query map[string][]string) (QueryRange, PageFilter) {
 
 // usageSummaryGet computes the dashboard aggregate for the requested range.
 func usageSummaryGet(req managementRequest) ([]byte, error) {
-	rng, errResp := parseUsageRange(req.Query)
-	if errResp != nil {
-		return okEnvelope(*errResp)
-	}
+	rng, filter := parsePageFilter(req.Query)
 	store := currentStore()
 	if store == nil {
 		return okEnvelope(jsonManagementResponse(500, map[string]string{"error": "usage store unavailable"}))
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), insertTimeout)
 	defer cancel()
-	summary, err := store.Summary(ctx, rng)
+	summary, err := store.Summary(ctx, rng, filter)
 	if err != nil {
 		return okEnvelope(jsonManagementResponse(500, map[string]string{"error": "failed to summarize usage"}))
 	}

@@ -1217,6 +1217,26 @@ function setTime(r) {
   refreshData();
 }
 
+var dropdownsInitialized = false;
+
+function buildFilterQueryParams() {
+  var params = [];
+  var now = new Date();
+  var start = null;
+  if (state.timeRange === "24h") start = new Date(now.getTime() - 24 * 3600 * 1000);
+  else if (state.timeRange === "7d") start = new Date(now.getTime() - 7 * 24 * 3600 * 1000);
+  else if (state.timeRange === "30d") start = new Date(now.getTime() - 30 * 24 * 3600 * 1000);
+
+  if (start) params.push("start=" + encodeURIComponent(start.toISOString()));
+  if (state.provider) params.push("provider=" + encodeURIComponent(state.provider));
+  if (state.alias) params.push("alias=" + encodeURIComponent(state.alias));
+  if (state.model) params.push("model=" + encodeURIComponent(state.model));
+  if (state.attribution) params.push("attribution=" + encodeURIComponent(state.attribution));
+  if (state.apiKey) params.push("api_key=" + encodeURIComponent(state.apiKey));
+  if (state.result) params.push("result=" + encodeURIComponent(state.result));
+  return params.length ? "&" + params.join("&") : "";
+}
+
 function applyFilters() {
   state.provider = document.getElementById("fltProvider").value;
   state.alias = document.getElementById("fltAlias").value;
@@ -1224,7 +1244,7 @@ function applyFilters() {
   state.attribution = document.getElementById("fltAttr").value;
   state.apiKey = document.getElementById("fltKey").value;
   state.result = document.getElementById("fltResult").value;
-  renderAllViews();
+  refreshData();
 }
 
 function resetFilters() {
@@ -1262,19 +1282,18 @@ function toggleTheme() {
 // Data Fetching & Rendering
 // ==========================================================================
 function refreshData() {
-  var now = new Date();
-  var start = null;
-  if (state.timeRange === "24h") start = new Date(now.getTime() - 24 * 3600 * 1000);
-  else if (state.timeRange === "7d") start = new Date(now.getTime() - 7 * 24 * 3600 * 1000);
-  else if (state.timeRange === "30d") start = new Date(now.getTime() - 30 * 24 * 3600 * 1000);
-
-  var url = "/usage/summary?source=router";
-  if (start) url += "&start=" + encodeURIComponent(start.toISOString());
+  var url = "/usage/summary?source=router" + buildFilterQueryParams();
 
   api(url).then(function(data) {
     state.rawSummary = data;
-    populateFilterDropdowns(data);
+    if (!dropdownsInitialized) {
+      populateFilterDropdowns(data);
+      dropdownsInitialized = true;
+    }
     renderAllViews();
+    if (state.tab === "requests") {
+      loadRequestsPage(0);
+    }
   }).catch(function(err) {
     console.error("Summary fetch error:", err);
   });

@@ -172,8 +172,61 @@ func (r *routerStore) scanRouterRows(ctx context.Context, start, end *time.Time,
 	return rows.Err()
 }
 
+// matchRouterRecord checks if a router record passes the given PageFilter.
+func matchRouterRecord(rec routerRecord, filter PageFilter) bool {
+	if filter.Model != "" &&
+		rec.ProviderModel != filter.Model &&
+		rec.ProviderAlias != filter.Model &&
+		rec.RouterModel != filter.Model {
+		return false
+	}
+	if filter.Alias != "" && rec.RouterModel != filter.Alias && (filter.Alias != "Direct / No Router" || rec.RouterModel != "") {
+		return false
+	}
+	if filter.Provider != "" && rec.Provider != filter.Provider {
+		return false
+	}
+	if filter.APIKey != "" && rec.MaskedAPIKey != filter.APIKey && rec.Provider != filter.APIKey {
+		return false
+	}
+	if filter.Attribution != "" && !strings.EqualFold(rec.Attribution, filter.Attribution) {
+		return false
+	}
+	if filter.ReasoningEffort != "" {
+		if filter.ReasoningEffort == "Not Specified" {
+			if rec.ReasoningEffort != "" {
+				return false
+			}
+		} else if !strings.EqualFold(rec.ReasoningEffort, filter.ReasoningEffort) {
+			return false
+		}
+	}
+	if filter.Executor != "" && !strings.EqualFold(rec.ExecutorType, filter.Executor) {
+		return false
+	}
+	if filter.ServiceTier != "" && !strings.EqualFold(rec.ServiceTier, filter.ServiceTier) {
+		return false
+	}
+	if filter.StatusCode > 0 && rec.StatusCode != filter.StatusCode {
+		return false
+	}
+	if filter.CachedOnly {
+		cached := rec.CachedTokens
+		if cached == 0 {
+			cached = rec.CacheReadTokens
+		}
+		if cached <= 0 {
+			return false
+		}
+	}
+	if filter.Failed != nil && rec.Failed != *filter.Failed {
+		return false
+	}
+	return true
+}
+
 // RouterSummary computes the complete 4-view UsageSummary shape.
-func (r *routerStore) RouterSummary(ctx context.Context, rng QueryRange) (*UsageSummary, error) {
+func (r *routerStore) RouterSummary(ctx context.Context, rng QueryRange, filter ...PageFilter) (*UsageSummary, error) {
 	summary := &UsageSummary{
 		Start:               rng.Start,
 		End:                 rng.End,
@@ -196,6 +249,11 @@ func (r *routerStore) RouterSummary(ctx context.Context, rng QueryRange) (*Usage
 	}
 	if r == nil {
 		return summary, nil
+	}
+
+	var activeFilter PageFilter
+	if len(filter) > 0 {
+		activeFilter = filter[0]
 	}
 
 	models := map[string]*enhancedGroupAcc{}
@@ -239,6 +297,9 @@ func (r *routerStore) RouterSummary(ctx context.Context, rng QueryRange) (*Usage
 	var scatterPoints []ScatterPoint
 
 	err := r.scanRouterRows(ctx, rng.Start, rng.End, func(rec routerRecord) error {
+		if !matchRouterRecord(rec, activeFilter) {
+			return nil
+		}
 		allRecordsCount++
 		latS := float64(rec.LatencyNS) / 1e9
 		ttftS := float64(rec.TTFTNS) / 1e9
@@ -492,40 +553,7 @@ func (r *routerStore) RouterPage(ctx context.Context, rng QueryRange, filter Pag
 	}
 	var matched []routerRecord
 	err := r.scanRouterRows(ctx, rng.Start, rng.End, func(rec routerRecord) error {
-		if filter.Model != "" &&
-			rec.ProviderModel != filter.Model &&
-			rec.ProviderAlias != filter.Model &&
-			rec.RouterModel != filter.Model {
-			return nil
-		}
-		if filter.Alias != "" && rec.RouterModel != filter.Alias && (filter.Alias != "Direct / No Router" || rec.RouterModel != "") {
-			return nil
-		}
-		if filter.Provider != "" && rec.Provider != filter.Provider {
-			return nil
-		}
-		if filter.APIKey != "" && rec.MaskedAPIKey != filter.APIKey {
-			return nil
-		}
-		if filter.Attribution != "" && rec.Attribution != filter.Attribution {
-			return nil
-		}
-		if filter.ReasoningEffort != "" && rec.ReasoningEffort != filter.ReasoningEffort && (filter.ReasoningEffort != "Not Specified" || rec.ReasoningEffort != "") {
-			return nil
-		}
-		if filter.Executor != "" && rec.ExecutorType != filter.Executor {
-			return nil
-		}
-		if filter.ServiceTier != "" && rec.ServiceTier != filter.ServiceTier {
-			return nil
-		}
-		if filter.StatusCode > 0 && rec.StatusCode != filter.StatusCode {
-			return nil
-		}
-		if filter.CachedOnly && rec.CachedTokens <= 0 && rec.CacheReadTokens <= 0 {
-			return nil
-		}
-		if filter.Failed != nil && rec.Failed != *filter.Failed {
+		if !matchRouterRecord(rec, filter) {
 			return nil
 		}
 		matched = append(matched, rec)

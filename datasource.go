@@ -43,17 +43,14 @@ func resolveSource(query map[string][]string) (string, *routerStore) {
 // usageSummaryGet / usageRequestsGet dispatch on the resolved source.
 
 func summaryForSource(req managementRequest) ([]byte, error) {
-	rng, errResp := parseUsageRange(req.Query)
-	if errResp != nil {
-		return okEnvelope(*errResp)
-	}
+	rng, filter := parsePageFilter(req.Query)
 	ctx, cancel := context.WithTimeout(context.Background(), insertTimeout)
 	defer cancel()
 
 	source, rs := resolveSource(req.Query)
 	if source == "router" && rs != nil {
 		defer rs.close()
-		summary, err := rs.RouterSummary(ctx, rng)
+		summary, err := rs.RouterSummary(ctx, rng, filter)
 		if err != nil {
 			return okEnvelope(jsonManagementResponse(500, map[string]string{"error": "router db read failed"}))
 		}
@@ -64,7 +61,7 @@ func summaryForSource(req managementRequest) ([]byte, error) {
 	if store == nil {
 		return okEnvelope(jsonManagementResponse(500, map[string]string{"error": "usage store unavailable"}))
 	}
-	summary, err := store.Summary(ctx, rng)
+	summary, err := store.Summary(ctx, rng, filter)
 	if err != nil {
 		return okEnvelope(jsonManagementResponse(500, map[string]string{"error": "failed to summarize usage"}))
 	}
