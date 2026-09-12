@@ -92,8 +92,6 @@ func (r *routerStore) close() {
 	}
 }
 
-// pluginLibraryDir returns the directory of this plugin's .so file, which is
-// the CPA plugins dir (same place model-router.db lives by default).
 func pluginLibraryDir() string {
 	dirIfDB := func(dir string) string {
 		if dir == "" {
@@ -127,8 +125,6 @@ func pluginLibraryDir() string {
 	return ""
 }
 
-// scanRouterRows runs fn for each payload row in [start,end) (either bound may
-// be nil), newest last.
 func (r *routerStore) scanRouterRows(ctx context.Context, start, end *time.Time, fn func(routerRecord) error) error {
 	db, err := r.connect()
 	if err != nil {
@@ -179,20 +175,24 @@ func (r *routerStore) scanRouterRows(ctx context.Context, start, end *time.Time,
 // RouterSummary computes the complete 4-view UsageSummary shape.
 func (r *routerStore) RouterSummary(ctx context.Context, rng QueryRange) (*UsageSummary, error) {
 	summary := &UsageSummary{
-		Start:            rng.Start,
-		End:              rng.End,
-		ByHour:           []HourStat{},
-		ByModel:          []GroupStat{},
-		ByAlias:          []GroupStat{},
-		ByProvider:       []GroupStat{},
-		ByAPIKey:         []GroupStat{},
-		ByAttribution:    []GroupStat{},
-		ByEffort:         []GroupStat{},
-		ByExecutor:       []GroupStat{},
-		ByPrefix:         []GroupStat{},
-		StatusCodes:      []StatusCodeStat{},
-		RouterMappings:   []RouterMapping{},
-		ContextHistogram: []ContextBucket{},
+		Start:               rng.Start,
+		End:                 rng.End,
+		ByHour:              []HourStat{},
+		ByModel:             []GroupStat{},
+		ByAlias:             []GroupStat{},
+		ByProvider:          []GroupStat{},
+		ByAPIKey:            []GroupStat{},
+		ByAttribution:       []GroupStat{},
+		ByEffort:            []GroupStat{},
+		ByExecutor:          []GroupStat{},
+		ByPrefix:            []GroupStat{},
+		StatusCodes:         []StatusCodeStat{},
+		RouterMappings:      []RouterMapping{},
+		LatencyDistribution: []DistributionBucket{},
+		TokenDistribution:   []DistributionBucket{},
+		ContextHistogram:    []DistributionBucket{},
+		ScatterPoints:       []ScatterPoint{},
+		SlowestRequests:     []RequestDetail{},
 	}
 	if r == nil {
 		return summary, nil
@@ -211,18 +211,35 @@ func (r *routerStore) RouterSummary(ctx context.Context, rng QueryRange) (*Usage
 	codes := map[int]int64{}
 	routerMaps := map[string]map[string]int64{}
 
-	histBuckets := map[string]int64{
-		"< 10k":       0,
-		"10k - 32k":   0,
-		"32k - 64k":   0,
-		"64k - 128k":  0,
-		"128k - 200k": 0,
-		"> 200k":      0,
+	latBuckets := map[string]int64{
+		"< 1s":    0,
+		"1 - 3s":  0,
+		"3 - 5s":  0,
+		"5 - 10s": 0,
+		"10 - 30s": 0,
+		"30 - 60s": 0,
+		"1 - 5m":  0,
+		"5 - 30m": 0,
+		"> 30m":   0,
 	}
 
+	tokBuckets := map[string]int64{
+		"< 1k":       0,
+		"1k - 10k":   0,
+		"10k - 50k":  0,
+		"50k - 100k": 0,
+		"100k - 200k": 0,
+		"200k - 400k": 0,
+		"> 400k":      0,
+	}
+
+	var allSlowest []routerRecord
+	var allRecordsCount int64
 	var totals enhancedGroupAcc
+	var scatterPoints []ScatterPoint
 
 	err := r.scanRouterRows(ctx, rng.Start, rng.End, func(rec routerRecord) error {
+		allRecordsCount++
 		latS := float64(rec.LatencyNS) / 1e9
 		ttftS := float64(rec.TTFTNS) / 1e9
 		latMs := rec.LatencyNS / int64(time.Millisecond)
@@ -233,42 +250,33 @@ func (r *routerStore) RouterSummary(ctx context.Context, rng QueryRange) (*Usage
 			cached = rec.CacheReadTokens
 		}
 
-		// Update totals
 		totals.add(rec.Failed, latMs, ttftMs, latS, ttftS, rec.InputTokens, rec.OutputTokens, rec.ReasoningTokens, cached, rec.TotalTokens, rec.StatusCode)
 
-		// Model dimension
 		modelName := firstNonEmpty(rec.ProviderModel, "unknown")
 		enhancedAccFor(models, modelName).add(rec.Failed, latMs, ttftMs, latS, ttftS, rec.InputTokens, rec.OutputTokens, rec.ReasoningTokens, cached, rec.TotalTokens, rec.StatusCode)
 
-		// Alias dimension
-		aliasName := firstNonEmpty(rec.RouterModel, "(direct)")
+		aliasName := firstNonEmpty(rec.RouterModel, "Direct / No Router")
 		enhancedAccFor(aliases, aliasName).add(rec.Failed, latMs, ttftMs, latS, ttftS, rec.InputTokens, rec.OutputTokens, rec.ReasoningTokens, cached, rec.TotalTokens, rec.StatusCode)
 		if _, ok := aliasSubs[aliasName]; !ok {
 			aliasSubs[aliasName] = map[string]int64{}
 		}
 		aliasSubs[aliasName][modelName]++
 
-		// Provider dimension
 		providerName := firstNonEmpty(rec.Provider, "unknown")
 		enhancedAccFor(providers, providerName).add(rec.Failed, latMs, ttftMs, latS, ttftS, rec.InputTokens, rec.OutputTokens, rec.ReasoningTokens, cached, rec.TotalTokens, rec.StatusCode)
 
-		// Key dimension
 		keyName := firstNonEmpty(rec.MaskedAPIKey, rec.Provider, "unknown")
 		enhancedAccFor(keys, keyName).add(rec.Failed, latMs, ttftMs, latS, ttftS, rec.InputTokens, rec.OutputTokens, rec.ReasoningTokens, cached, rec.TotalTokens, rec.StatusCode)
 
-		// Attribution dimension
 		attrName := firstNonEmpty(rec.Attribution, "unattributed")
 		enhancedAccFor(attributions, attrName).add(rec.Failed, latMs, ttftMs, latS, ttftS, rec.InputTokens, rec.OutputTokens, rec.ReasoningTokens, cached, rec.TotalTokens, rec.StatusCode)
 
-		// Effort dimension
-		effortName := firstNonEmpty(rec.ReasoningEffort, "(none)")
+		effortName := firstNonEmpty(rec.ReasoningEffort, "Not Specified")
 		enhancedAccFor(efforts, effortName).add(rec.Failed, latMs, ttftMs, latS, ttftS, rec.InputTokens, rec.OutputTokens, rec.ReasoningTokens, cached, rec.TotalTokens, rec.StatusCode)
 
-		// Executor dimension
 		executorName := firstNonEmpty(rec.ExecutorType, "unknown")
 		enhancedAccFor(executors, executorName).add(rec.Failed, latMs, ttftMs, latS, ttftS, rec.InputTokens, rec.OutputTokens, rec.ReasoningTokens, cached, rec.TotalTokens, rec.StatusCode)
 
-		// Prefix dimension (from provider_alias)
 		prefix := "none"
 		if rec.ProviderAlias != "" && strings.Contains(rec.ProviderAlias, "/") {
 			prefix = strings.Split(rec.ProviderAlias, "/")[0] + "/"
@@ -277,7 +285,6 @@ func (r *routerStore) RouterSummary(ctx context.Context, rng QueryRange) (*Usage
 		}
 		enhancedAccFor(prefixes, prefix).add(rec.Failed, latMs, ttftMs, latS, ttftS, rec.InputTokens, rec.OutputTokens, rec.ReasoningTokens, cached, rec.TotalTokens, rec.StatusCode)
 
-		// Router mapping
 		if rec.RouterModel != "" {
 			if _, ok := routerMaps[rec.RouterModel]; !ok {
 				routerMaps[rec.RouterModel] = map[string]int64{}
@@ -285,28 +292,76 @@ func (r *routerStore) RouterSummary(ctx context.Context, rng QueryRange) (*Usage
 			routerMaps[rec.RouterModel][modelName]++
 		}
 
-		// Histogram
+		// Latency Distribution
+		switch {
+		case latS < 1:
+			latBuckets["< 1s"]++
+		case latS < 3:
+			latBuckets["1 - 3s"]++
+		case latS < 5:
+			latBuckets["3 - 5s"]++
+		case latS < 10:
+			latBuckets["5 - 10s"]++
+		case latS < 30:
+			latBuckets["10 - 30s"]++
+		case latS < 60:
+			latBuckets["30 - 60s"]++
+		case latS < 300:
+			latBuckets["1 - 5m"]++
+		case latS < 1800:
+			latBuckets["5 - 30m"]++
+		default:
+			latBuckets["> 30m"]++
+		}
+
+		// Token Distribution
 		inTok := rec.InputTokens
 		switch {
+		case inTok < 1000:
+			tokBuckets["< 1k"]++
 		case inTok < 10000:
-			histBuckets["< 10k"]++
-		case inTok < 32000:
-			histBuckets["10k - 32k"]++
-		case inTok < 64000:
-			histBuckets["32k - 64k"]++
-		case inTok < 128000:
-			histBuckets["64k - 128k"]++
+			tokBuckets["1k - 10k"]++
+		case inTok < 50000:
+			tokBuckets["10k - 50k"]++
+		case inTok < 100000:
+			tokBuckets["50k - 100k"]++
 		case inTok < 200000:
-			histBuckets["128k - 200k"]++
+			tokBuckets["100k - 200k"]++
+		case inTok < 400000:
+			tokBuckets["200k - 400k"]++
 		default:
-			histBuckets["> 200k"]++
+			tokBuckets["> 400k"]++
+		}
+
+		// Scatter points sample (take up to 150 points for chart)
+		if len(scatterPoints) < 150 {
+			if latS > 0 || ttftS > 0 {
+				scatterPoints = append(scatterPoints, ScatterPoint{
+					LatencyS: round2(latS),
+					TTFTS:    round2(ttftS),
+					Model:    modelName,
+					Provider: providerName,
+					Failed:   rec.Failed,
+				})
+			}
+		}
+
+		// Slowest requests collection
+		if len(allSlowest) < 30 || rec.LatencyNS > allSlowest[len(allSlowest)-1].LatencyNS {
+			allSlowest = append(allSlowest, rec)
+			sort.Slice(allSlowest, func(i, j int) bool {
+				return allSlowest[i].LatencyNS > allSlowest[j].LatencyNS
+			})
+			if len(allSlowest) > 30 {
+				allSlowest = allSlowest[:30]
+			}
 		}
 
 		// Hourly stats
 		hour := rec.RequestedAt
 		if len(hour) >= 13 {
 			hour = hour[:13]
-			richHourAccFor(hours, hour).add(rec.Failed, rec.TotalTokens, rec.InputTokens, rec.OutputTokens, rec.Attribution == "routed", rec.Attribution == "direct", rec.ReasoningEffort == "high" || rec.ReasoningEffort == "max")
+			richHourAccFor(hours, hour).add(rec.Failed, rec.TotalTokens, rec.InputTokens, rec.OutputTokens, rec.Attribution == "routed", rec.Attribution == "direct", rec.ReasoningEffort == "high" || rec.ReasoningEffort == "max", latS)
 		}
 
 		if rec.Failed && rec.StatusCode > 0 {
@@ -318,9 +373,18 @@ func (r *routerStore) RouterSummary(ctx context.Context, rng QueryRange) (*Usage
 		return nil, err
 	}
 
-	// Calculate overall percentiles and totals
-	p50Lat, p90Lat := percentile(totals.latS, 0.5), percentile(totals.latS, 0.9)
-	p50TTFT, p90TTFT := percentile(totals.ttftS, 0.5), percentile(totals.ttftS, 0.9)
+	p50Lat := percentile(totals.latS, 0.5)
+	p75Lat := percentile(totals.latS, 0.75)
+	p90Lat := percentile(totals.latS, 0.9)
+	p95Lat := percentile(totals.latS, 0.95)
+	p99Lat := percentile(totals.latS, 0.99)
+	maxLat := float64(0)
+	if len(totals.latS) > 0 {
+		maxLat = totals.latS[len(totals.latS)-1]
+	}
+
+	p50TTFT := percentile(totals.ttftS, 0.5)
+	p90TTFT := percentile(totals.ttftS, 0.9)
 
 	var hungCount int64
 	for _, l := range totals.latS {
@@ -329,24 +393,36 @@ func (r *routerStore) RouterSummary(ctx context.Context, rng QueryRange) (*Usage
 		}
 	}
 
+	errRate := float64(0)
+	if totals.calls > 0 {
+		errRate = round2(float64(totals.failed) / float64(totals.calls) * 100)
+	}
+
 	summary.Totals = SummaryTotals{
-		Calls:           totals.calls,
-		Failed:          totals.failed,
-		InputTokens:     totals.inTok,
-		OutputTokens:    totals.outTok,
-		ReasoningTokens: totals.reasoningTok,
-		CachedTokens:    totals.cachedTok,
-		TotalTokens:     totals.totalTok,
-		AvgLatencyMs:    avgOrZero(totals.latSum, totals.calls),
-		AvgTTFTMs:       avgOrZero(totals.ttftSum, totals.calls),
-		P50LatencyS:     round2(p50Lat),
-		P90LatencyS:     round2(p90Lat),
-		P50TTFTS:        round2(p50TTFT),
-		P90TTFTS:        round2(p90TTFT),
-		HungCalls:       hungCount,
-		CacheHitCalls:   totals.cacheHitCalls,
-		ActiveKeys:      int64(len(keys)),
-		ActiveModels:    int64(len(models)),
+		Calls:               totals.calls,
+		Success:             totals.calls - totals.failed,
+		Failed:              totals.failed,
+		ErrorRate:           errRate,
+		InputTokens:         totals.inTok,
+		OutputTokens:        totals.outTok,
+		ReasoningTokens:     totals.reasoningTok,
+		CachedTokens:        totals.cachedTok,
+		CacheCreationTokens: 0,
+		TotalTokens:         totals.totalTok,
+		AvgLatencyMs:        avgOrZero(totals.latSum, totals.calls),
+		AvgTTFTMs:           avgOrZero(totals.ttftSum, totals.calls),
+		P50LatencyS:         round2(p50Lat),
+		P75LatencyS:         round2(p75Lat),
+		P90LatencyS:         round2(p90Lat),
+		P95LatencyS:         round2(p95Lat),
+		P99LatencyS:         round2(p99Lat),
+		MaxLatencyS:         round2(maxLat),
+		P50TTFTS:            round2(p50TTFT),
+		P90TTFTS:            round2(p90TTFT),
+		HungCalls:           hungCount,
+		CacheHitCalls:       totals.cacheHitCalls,
+		ActiveKeys:          int64(len(keys)),
+		ActiveModels:        int64(len(models)),
 	}
 
 	summary.ByModel = enhancedToStats(models, nil)
@@ -358,13 +434,18 @@ func (r *routerStore) RouterSummary(ctx context.Context, rng QueryRange) (*Usage
 	summary.ByExecutor = enhancedToStats(executors, nil)
 	summary.ByPrefix = enhancedToStats(prefixes, nil)
 	summary.ByHour = richHourAccsToStats(hours)
+	summary.ScatterPoints = scatterPoints
+
+	// Slowest requests
+	for _, rec := range allSlowest {
+		summary.SlowestRequests = append(summary.SlowestRequests, routerToDetail(rec))
+	}
 
 	for code, calls := range codes {
 		summary.StatusCodes = append(summary.StatusCodes, StatusCodeStat{StatusCode: code, Calls: calls})
 	}
 	sortStatusCodeStats(summary.StatusCodes)
 
-	// Router mappings
 	for alias, mapModels := range routerMaps {
 		for model, calls := range mapModels {
 			summary.RouterMappings = append(summary.RouterMappings, RouterMapping{
@@ -381,19 +462,29 @@ func (r *routerStore) RouterSummary(ctx context.Context, rng QueryRange) (*Usage
 		return summary.RouterMappings[i].Alias < summary.RouterMappings[j].Alias
 	})
 
-	// Histogram buckets in order
-	bucketOrder := []string{"< 10k", "10k - 32k", "32k - 64k", "64k - 128k", "128k - 200k", "> 200k"}
-	for _, b := range bucketOrder {
-		summary.ContextHistogram = append(summary.ContextHistogram, ContextBucket{
+	latOrder := []string{"< 1s", "1 - 3s", "3 - 5s", "5 - 10s", "10 - 30s", "30 - 60s", "1 - 5m", "5 - 30m", "> 30m"}
+	for _, b := range latOrder {
+		summary.LatencyDistribution = append(summary.LatencyDistribution, DistributionBucket{
 			Label: b,
-			Calls: histBuckets[b],
+			Calls: latBuckets[b],
+		})
+	}
+
+	tokOrder := []string{"< 1k", "1k - 10k", "10k - 50k", "50k - 100k", "100k - 200k", "200k - 400k", "> 400k"}
+	for _, b := range tokOrder {
+		summary.TokenDistribution = append(summary.TokenDistribution, DistributionBucket{
+			Label: b,
+			Calls: tokBuckets[b],
+		})
+		summary.ContextHistogram = append(summary.ContextHistogram, DistributionBucket{
+			Label: b,
+			Calls: tokBuckets[b],
 		})
 	}
 
 	return summary, nil
 }
 
-// RouterPage returns a paginated request listing from the model-router db with full filtering.
 func (r *routerStore) RouterPage(ctx context.Context, rng QueryRange, filter PageFilter) (*UsagePage, error) {
 	page := &UsagePage{Limit: filter.Limit, Offset: filter.Offset, Rows: []RequestDetail{}}
 	if r == nil {
@@ -407,7 +498,7 @@ func (r *routerStore) RouterPage(ctx context.Context, rng QueryRange, filter Pag
 			rec.RouterModel != filter.Model {
 			return nil
 		}
-		if filter.Alias != "" && rec.RouterModel != filter.Alias && (filter.Alias != "(direct)" || rec.RouterModel != "") {
+		if filter.Alias != "" && rec.RouterModel != filter.Alias && (filter.Alias != "Direct / No Router" || rec.RouterModel != "") {
 			return nil
 		}
 		if filter.Provider != "" && rec.Provider != filter.Provider {
@@ -419,10 +510,13 @@ func (r *routerStore) RouterPage(ctx context.Context, rng QueryRange, filter Pag
 		if filter.Attribution != "" && rec.Attribution != filter.Attribution {
 			return nil
 		}
-		if filter.ReasoningEffort != "" && rec.ReasoningEffort != filter.ReasoningEffort && (filter.ReasoningEffort != "(none)" || rec.ReasoningEffort != "") {
+		if filter.ReasoningEffort != "" && rec.ReasoningEffort != filter.ReasoningEffort && (filter.ReasoningEffort != "Not Specified" || rec.ReasoningEffort != "") {
 			return nil
 		}
 		if filter.Executor != "" && rec.ExecutorType != filter.Executor {
+			return nil
+		}
+		if filter.ServiceTier != "" && rec.ServiceTier != filter.ServiceTier {
 			return nil
 		}
 		if filter.StatusCode > 0 && rec.StatusCode != filter.StatusCode {
@@ -441,7 +535,6 @@ func (r *routerStore) RouterPage(ctx context.Context, rng QueryRange, filter Pag
 		return nil, err
 	}
 	page.Total = int64(len(matched))
-	// newest first
 	for i, j := 0, len(matched)-1; i < j; i, j = i+1, j-1 {
 		matched[i], matched[j] = matched[j], matched[i]
 	}
@@ -477,17 +570,18 @@ func routerToDetail(rec routerRecord) RequestDetail {
 	}
 	return RequestDetail{
 		ID:              "mr:" + strconv.FormatInt(rec.Sequence, 10),
+		Sequence:        rec.Sequence,
 		Timestamp:       parseRouterTimestampOrZero(rec.RequestedAt),
 		APIKey:          rec.MaskedAPIKey,
 		Provider:        rec.Provider,
 		Model:           firstNonEmpty(rec.ProviderModel, rec.ProviderAlias),
-		Alias:           rec.RouterModel,
+		Alias:           firstNonEmpty(rec.RouterModel, "Direct / No Router"),
 		Source:          firstNonEmpty(rec.Source, rec.Attribution),
 		AuthIndex:       "",
 		AuthType:        "",
 		ExecutorType:    firstNonEmpty(rec.ExecutorType, ""),
-		ReasoningEffort: rec.ReasoningEffort,
-		ServiceTier:     rec.ServiceTier,
+		ReasoningEffort: firstNonEmpty(rec.ReasoningEffort, "Not Specified"),
+		ServiceTier:     firstNonEmpty(rec.ServiceTier, "auto"),
 		LatencyMs:       rec.LatencyNS / int64(time.Millisecond),
 		TTFTMs:          rec.TTFTNS / int64(time.Millisecond),
 		Failed:          rec.Failed,
@@ -579,8 +673,13 @@ func enhancedAccFor(m map[string]*enhancedGroupAcc, key string) *enhancedGroupAc
 func enhancedToStats(m map[string]*enhancedGroupAcc, subMaps map[string]map[string]int64) []GroupStat {
 	out := make([]GroupStat, 0, len(m))
 	for name, g := range m {
-		p50Lat, p90Lat := percentile(g.latS, 0.5), percentile(g.latS, 0.9)
-		p50TTFT, p90TTFT := percentile(g.ttftS, 0.5), percentile(g.ttftS, 0.9)
+		p50Lat := percentile(g.latS, 0.5)
+		p75Lat := percentile(g.latS, 0.75)
+		p90Lat := percentile(g.latS, 0.9)
+		p95Lat := percentile(g.latS, 0.95)
+		p99Lat := percentile(g.latS, 0.99)
+		p50TTFT := percentile(g.ttftS, 0.5)
+		p90TTFT := percentile(g.ttftS, 0.9)
 
 		topErr := 0
 		var maxErrCount int64
@@ -604,11 +703,18 @@ func enhancedToStats(m map[string]*enhancedGroupAcc, subMaps map[string]map[stri
 			}
 		}
 
+		errRate := float64(0)
+		if g.calls > 0 {
+			errRate = round2(float64(g.failed) / float64(g.calls) * 100)
+		}
+
 		out = append(out, GroupStat{
 			Name:            name,
 			Sub:             sub,
 			Calls:           g.calls,
+			Success:         g.calls - g.failed,
 			Failed:          g.failed,
+			ErrorRate:       errRate,
 			InputTokens:     g.inTok,
 			OutputTokens:    g.outTok,
 			ReasoningTokens: g.reasoningTok,
@@ -618,7 +724,10 @@ func enhancedToStats(m map[string]*enhancedGroupAcc, subMaps map[string]map[stri
 			AvgLatencyMs:    avgOrZero(g.latSum, g.calls),
 			AvgTTFTMs:       avgOrZero(g.ttftSum, g.calls),
 			P50LatencyS:     round2(p50Lat),
+			P75LatencyS:     round2(p75Lat),
 			P90LatencyS:     round2(p90Lat),
+			P95LatencyS:     round2(p95Lat),
+			P99LatencyS:     round2(p99Lat),
 			P50TTFTS:        round2(p50TTFT),
 			P90TTFTS:        round2(p90TTFT),
 			TopError:        topErr,
@@ -642,9 +751,10 @@ type richHourAcc struct {
 	routed       int64
 	direct       int64
 	highEffort   int64
+	latS         []float64
 }
 
-func (h *richHourAcc) add(failed bool, total, in, out int64, isRouted, isDirect, isHighEffort bool) {
+func (h *richHourAcc) add(failed bool, total, in, out int64, isRouted, isDirect, isHighEffort bool, latS float64) {
 	h.calls++
 	if failed {
 		h.failed++
@@ -660,6 +770,9 @@ func (h *richHourAcc) add(failed bool, total, in, out int64, isRouted, isDirect,
 	}
 	if isHighEffort {
 		h.highEffort++
+	}
+	if latS > 0 {
+		h.latS = append(h.latS, latS)
 	}
 }
 
@@ -681,16 +794,26 @@ func richHourAccsToStats(m map[string]*richHourAcc) []HourStat {
 	out := make([]HourStat, 0, len(keys))
 	for _, k := range keys {
 		h := m[k]
+		errRate := float64(0)
+		if h.calls > 0 {
+			errRate = round2(float64(h.failed) / float64(h.calls) * 100)
+		}
 		out = append(out, HourStat{
 			Hour:         k,
 			Calls:        h.calls,
+			Success:      h.calls - h.failed,
 			Failed:       h.failed,
+			ErrorRate:    errRate,
 			TotalTokens:  h.totalTokens,
 			InputTokens:  h.inputTokens,
 			OutputTokens: h.outputTokens,
 			RoutedCalls:  h.routed,
 			DirectCalls:  h.direct,
 			HighEffort:   h.highEffort,
+			P50LatencyS:  round2(percentile(h.latS, 0.5)),
+			P90LatencyS:  round2(percentile(h.latS, 0.9)),
+			P95LatencyS:  round2(percentile(h.latS, 0.95)),
+			P99LatencyS:  round2(percentile(h.latS, 0.99)),
 		})
 	}
 	return out

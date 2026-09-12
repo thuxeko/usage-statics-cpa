@@ -17,6 +17,9 @@ import (
 //go:embed dashboard.html
 var dashboardHTML string
 
+//go:embed dashboard2.html
+var dashboard2HTML string
+
 const (
 	abiVersion uint32 = 1
 	pluginID          = "usage-statistics"
@@ -40,7 +43,10 @@ const (
 	// dashboardMatchPath is the normalized form compared in management.handle
 	// after stripping the /v0/resource prefix from the forwarded path.
 	dashboardMatchPath = "/plugins/" + pluginID + "/dashboard"
-	insertTimeout      = 5 * time.Second
+
+	dashboard2Path      = "/v0/resource/plugins/" + pluginID + "/dashboard2"
+	dashboard2MatchPath = "/plugins/" + pluginID + "/dashboard2"
+	insertTimeout       = 5 * time.Second
 )
 
 // Overridable at build time via -ldflags "-X main.pluginVersion=...".
@@ -179,7 +185,12 @@ func managementRegistration() managementRegistrationPayload {
 				// shows "Usage Statistics" in the management Plugins menu.
 				Path:        "/dashboard",
 				Menu:        "Usage Statistics",
-				Description: "Usage dashboard: overview, models, requests, keys & providers.",
+				Description: "Usage dashboard: 4 views (Obsidian/Linear design).",
+			},
+			{
+				Path:        "/dashboard2",
+				Menu:        "Analytics Dashboard",
+				Description: "Lightweight Analytics Dashboard v2 (compact, icon-free).",
 			},
 		},
 	}
@@ -329,6 +340,11 @@ func handleManagement(request []byte) ([]byte, error) {
 			return okEnvelope(jsonManagementResponse(405, map[string]string{"error": "method not allowed"}))
 		}
 		return okEnvelope(jsonManagementResponseHTML(dashboardHTML))
+	case path == strings.TrimRight(dashboard2MatchPath, "/"):
+		if !strings.EqualFold(strings.TrimSpace(req.Method), "GET") {
+			return okEnvelope(jsonManagementResponse(405, map[string]string{"error": "method not allowed"}))
+		}
+		return okEnvelope(jsonManagementResponseHTML(dashboard2HTML))
 	case path == strings.TrimRight(managementUsagePath, "/"):
 		// Raw record listing / delete (upstream behaviour, kept intact).
 		switch strings.ToUpper(strings.TrimSpace(req.Method)) {
@@ -383,6 +399,9 @@ func parsePageFilter(query map[string][]string) (QueryRange, PageFilter) {
 	}
 	if v := firstValue(query, "executor"); strings.TrimSpace(v) != "" {
 		filter.Executor = strings.TrimSpace(v)
+	}
+	if v := firstValue(query, "service_tier"); strings.TrimSpace(v) != "" {
+		filter.ServiceTier = strings.TrimSpace(v)
 	}
 	if v := firstValue(query, "status_code"); strings.TrimSpace(v) != "" {
 		filter.StatusCode = toConfigInt(v)

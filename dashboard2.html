@@ -1,0 +1,1852 @@
+<!DOCTYPE html>
+<html lang="vi" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Analytics Dashboard · CLIProxyAPI</title>
+<style>
+/* ==========================================================================
+   Minimalist Slate Theme (Clean, High-Density, Icon-Free)
+   ========================================================================== */
+:root {
+  --bg: #090d16;
+  --bg-card: #111726;
+  --bg-card-hover: #172033;
+  --bg-subtle: #161e30;
+  --bg-glass: rgba(17, 23, 38, 0.92);
+  --border: rgba(255, 255, 255, 0.08);
+  --border-focus: rgba(99, 102, 241, 0.5);
+  --text: #f8fafc;
+  --text-dim: #94a3b8;
+  --text-muted: #64748b;
+  --accent: #6366f1;
+  --accent-glow: rgba(99, 102, 241, 0.12);
+  --ok: #10b981;
+  --ok-bg: rgba(16, 185, 129, 0.12);
+  --warn: #f59e0b;
+  --warn-bg: rgba(245, 158, 11, 0.12);
+  --bad: #f43f5e;
+  --bad-bg: rgba(244, 63, 94, 0.12);
+  --cyan: #06b6d4;
+  --purple: #a855f7;
+  --radius: 8px;
+  --radius-sm: 4px;
+  --shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+}
+[data-theme="light"] {
+  --bg: #f8fafc;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f1f5f9;
+  --bg-subtle: #f1f5f9;
+  --bg-glass: rgba(255, 255, 255, 0.94);
+  --border: rgba(0, 0, 0, 0.08);
+  --border-focus: rgba(99, 102, 241, 0.4);
+  --text: #0f172a;
+  --text-dim: #475569;
+  --text-muted: #94a3b8;
+  --accent: #4f46e5;
+  --accent-glow: rgba(79, 70, 229, 0.08);
+  --ok: #059669;
+  --ok-bg: rgba(5, 150, 105, 0.1);
+  --warn: #d97706;
+  --warn-bg: rgba(217, 119, 6, 0.1);
+  --bad: #e11d48;
+  --bad-bg: rgba(225, 29, 72, 0.1);
+  --cyan: #0284c7;
+  --purple: #9333ea;
+  --shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.45;
+  padding-bottom: 60px;
+  -webkit-font-smoothing: antialiased;
+}
+
+.container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+/* Header & Clearance for CPAMC mobile floating capsule */
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 12px;
+}
+.brand-title {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+}
+.brand-sub {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Minimal Badges */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.badge-ok { border-color: var(--ok); color: var(--ok); background: var(--ok-bg); }
+.badge-bad { border-color: var(--bad); color: var(--bad); background: var(--bad-bg); }
+.badge-warn { border-color: var(--warn); color: var(--warn); background: var(--warn-bg); }
+.badge-accent { border-color: var(--accent); color: var(--accent); background: var(--accent-glow); }
+
+/* Sticky Global Filter Bar */
+.filter-bar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: var(--bg-glass);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  margin-bottom: 14px;
+  box-shadow: var(--shadow);
+}
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.time-pills {
+  display: flex;
+  background: var(--bg-subtle);
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+.pill-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 9px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.pill-btn:hover { color: var(--text); }
+.pill-btn.active {
+  background: var(--bg-card);
+  color: var(--text);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+.filter-select {
+  background: var(--bg-card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  outline: none;
+  cursor: pointer;
+  min-width: 95px;
+}
+.filter-select:focus { border-color: var(--border-focus); }
+.btn-text {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  transition: all 0.15s;
+}
+.btn-text:hover { color: var(--text); border-color: var(--text-muted); }
+
+/* Navigation Tabs */
+.nav-tabs {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+  scrollbar-width: none;
+}
+.nav-tabs::-webkit-scrollbar { display: none; }
+.tab-btn {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-dim);
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+.tab-btn:hover { color: var(--text); }
+.tab-btn.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* KPI Grid & Cards */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.stat-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.15s, border-color 0.15s;
+}
+.stat-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255,255,255,0.15);
+}
+.stat-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.stat-value {
+  font-size: 20px;
+  font-weight: 700;
+  font-family: var(--mono);
+  letter-spacing: -0.4px;
+  color: var(--text);
+  line-height: 1.1;
+  margin-bottom: 2px;
+}
+.stat-sub {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* Panels & Grid Layout */
+.section-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.col-12 { grid-column: span 12; }
+.col-8 { grid-column: span 8; }
+.col-7 { grid-column: span 7; }
+.col-6 { grid-column: span 6; }
+.col-5 { grid-column: span 5; }
+.col-4 { grid-column: span 4; }
+
+.panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+}
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.panel-title {
+  font-size: 12px;
+  font-weight: 700;
+}
+.panel-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* Clean Data Tables */
+.table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border-radius: var(--radius-sm);
+}
+table.clean-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  text-align: left;
+}
+table.clean-table th {
+  padding: 7px 9px;
+  background: var(--bg-subtle);
+  color: var(--text-dim);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  user-select: none;
+}
+table.clean-table th.sortable { cursor: pointer; }
+table.clean-table th.sortable:hover { color: var(--text); }
+table.clean-table td {
+  padding: 7px 9px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  white-space: nowrap;
+}
+table.clean-table tr:hover td {
+  background: var(--bg-card-hover);
+}
+table.clean-table .num {
+  text-align: right;
+  font-family: var(--mono);
+}
+.clickable-item {
+  color: var(--accent);
+  cursor: pointer;
+  font-weight: 600;
+}
+.clickable-item:hover {
+  text-decoration: underline;
+}
+
+/* SVG Chart Box */
+.chart-box {
+  width: 100%;
+  min-height: 190px;
+  position: relative;
+}
+svg.chart {
+  width: 100%;
+  height: 190px;
+  overflow: visible;
+}
+.chart-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: var(--bg-glass);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 10px;
+  font-family: var(--mono);
+  box-shadow: var(--shadow);
+  display: none;
+  z-index: 100;
+  white-space: nowrap;
+}
+
+/* Drawer / Modal */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(6px);
+  z-index: 1000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.modal-content {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  max-width: 720px;
+  width: 100%;
+  max-height: 88vh;
+  overflow-y: auto;
+  padding: 18px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+}
+.error-cause-card {
+  background: var(--bg);
+  border: 1px solid var(--bad);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  margin: 10px 0;
+}
+.error-cause-title {
+  color: var(--bad);
+  font-weight: 700;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+.detail-row {
+  display: flex;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 11px;
+}
+.detail-k {
+  color: var(--text-dim);
+  width: 110px;
+  flex-shrink: 0;
+}
+.detail-v {
+  color: var(--text);
+  word-break: break-word;
+  overflow-wrap: break-word;
+  flex: 1;
+}
+
+.note-callout {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  border: 1px dashed var(--border);
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 8px;
+}
+
+/* Mobile Responsive */
+@media (max-width: 960px) {
+  .col-8, .col-7, .col-6, .col-5, .col-4 { grid-column: span 12; }
+}
+@media (max-width: 640px) {
+  body { padding-top: 60px; }
+  .kpi-grid { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .stat-value { font-size: 17px; }
+  .filter-row { gap: 4px; }
+  .filter-select { min-width: 80px; }
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+  <!-- Header -->
+  <header class="app-header">
+    <div>
+      <div class="brand-title">Analytics Dashboard</div>
+      <div class="brand-sub">CLIProxyAPI Internal Gateway Monitoring</div>
+    </div>
+    <div class="header-actions">
+      <span class="badge" id="srcBadge">source: model-router.db</span>
+      <button class="btn-text" onclick="toggleTheme()">Theme</button>
+      <button class="btn-text" onclick="refreshData()">Refresh</button>
+    </div>
+  </header>
+
+  <!-- Global Command & Filter Bar -->
+  <div class="filter-bar">
+    <div class="filter-row">
+      <!-- Time Presets -->
+      <div class="time-pills">
+        <button class="pill-btn" data-time="1h" onclick="setTime('1h')">1h</button>
+        <button class="pill-btn" data-time="6h" onclick="setTime('6h')">6h</button>
+        <button class="pill-btn" data-time="24h" onclick="setTime('24h')">24h</button>
+        <button class="pill-btn active" data-time="7d" onclick="setTime('7d')">7 days</button>
+        <button class="pill-btn" data-time="all" onclick="setTime('all')">All</button>
+      </div>
+
+      <select id="fltGranularity" class="filter-select" onchange="renderAllViews()">
+        <option value="auto">Density: Auto</option>
+        <option value="hour">1 Hour</option>
+        <option value="day">1 Day</option>
+      </select>
+
+      <select id="fltProvider" class="filter-select" onchange="applyFilters()">
+        <option value="">Provider: All</option>
+      </select>
+
+      <select id="fltModel" class="filter-select" onchange="applyFilters()">
+        <option value="">Model: All</option>
+      </select>
+
+      <select id="fltRouter" class="filter-select" onchange="applyFilters()">
+        <option value="">Router: All</option>
+      </select>
+
+      <select id="fltKey" class="filter-select" onchange="applyFilters()">
+        <option value="">API Key: All</option>
+      </select>
+
+      <select id="fltAttribution" class="filter-select" onchange="applyFilters()">
+        <option value="">Attribution: All</option>
+        <option value="routed">routed</option>
+        <option value="direct">direct</option>
+        <option value="unattributed">unattributed</option>
+      </select>
+
+      <select id="fltEffort" class="filter-select" onchange="applyFilters()">
+        <option value="">Reasoning: All</option>
+        <option value="high">high</option>
+        <option value="medium">medium</option>
+        <option value="low">low</option>
+        <option value="max">max</option>
+        <option value="minimal">minimal</option>
+        <option value="Not Specified">Not Specified</option>
+      </select>
+
+      <select id="fltExecutor" class="filter-select" onchange="applyFilters()">
+        <option value="">Executor: All</option>
+      </select>
+
+      <select id="fltStatus" class="filter-select" onchange="applyFilters()">
+        <option value="">Status: All</option>
+        <option value="success">Success</option>
+        <option value="failed">Failed</option>
+      </select>
+
+      <select id="fltStatusCode" class="filter-select" onchange="applyFilters()">
+        <option value="">Status Code: All</option>
+        <option value="429">429 (Rate Limit)</option>
+        <option value="503">503 (Unavailable)</option>
+        <option value="502">502 (Bad Gateway)</option>
+        <option value="400">400 (Bad Request)</option>
+        <option value="524">524 (Timeout)</option>
+        <option value="403">403 (Forbidden)</option>
+        <option value="401">401 (Unauthorized)</option>
+        <option value="402">402 (Payment)</option>
+      </select>
+
+      <button class="btn-text" onclick="resetFilters()">Reset</button>
+    </div>
+  </div>
+
+  <!-- Navigation Tabs (No View x text) -->
+  <div class="nav-tabs">
+    <button class="tab-btn active" data-tab="overview" onclick="switchTab('overview')">Overview</button>
+    <button class="tab-btn" data-tab="requests_models" onclick="switchTab('requests_models')">Requests & Models</button>
+    <button class="tab-btn" data-tab="performance" onclick="switchTab('performance')">Performance</button>
+    <button class="tab-btn" data-tab="tokens_efficiency" onclick="switchTab('tokens_efficiency')">Tokens & Efficiency</button>
+    <button class="tab-btn" data-tab="requests_log" onclick="switchTab('requests_log')">Tra cứu Requests</button>
+  </div>
+
+  <!-- =========================================================================
+       TAB 1: OVERVIEW
+       ========================================================================= -->
+  <div id="tab-overview" class="tab-pane">
+    <div class="kpi-grid">
+      <div class="stat-card">
+        <div class="stat-label">Total Requests</div>
+        <div class="stat-value" id="ov-total">–</div>
+        <div class="stat-sub">Total inbound traffic</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Successful Requests</div>
+        <div class="stat-value" id="ov-success" style="color:var(--ok)">–</div>
+        <div class="stat-sub">200 OK responses</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Failed Requests</div>
+        <div class="stat-value" id="ov-failed" style="color:var(--bad)">–</div>
+        <div class="stat-sub">HTTP error responses</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Error Rate</div>
+        <div class="stat-value" id="ov-error-rate">–</div>
+        <div class="stat-sub">Failed / Total ratio</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">P50 / P90 Latency</div>
+        <div class="stat-value" id="ov-latency">–</div>
+        <div class="stat-sub">Response duration</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">P50 TTFT</div>
+        <div class="stat-value" id="ov-ttft">–</div>
+        <div class="stat-sub">Time to first token</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Total Input Tokens</div>
+        <div class="stat-value" id="ov-in-tokens">–</div>
+        <div class="stat-sub">Prompt context tokens</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Total Output Tokens</div>
+        <div class="stat-value" id="ov-out-tokens">–</div>
+        <div class="stat-sub">Generated output tokens</div>
+      </div>
+    </div>
+
+    <div class="section-grid">
+      <div class="col-8 panel">
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">Request Volume Over Time</div>
+            <div class="panel-desc">Inbound request count partitioned by Success and Failed</div>
+          </div>
+          <div style="display:flex;gap:6px">
+            <span class="badge badge-ok">[Success]</span>
+            <span class="badge badge-bad">[Failed]</span>
+          </div>
+        </div>
+        <div class="chart-box" id="ov-chart-volume"></div>
+      </div>
+
+      <div class="col-4 panel">
+        <div class="panel-header">
+          <div class="panel-title">HTTP Error Distribution</div>
+          <div class="panel-desc">Breakdown by status code (429, 503, 502, 400...)</div>
+        </div>
+        <div class="chart-box" id="ov-chart-errors"></div>
+      </div>
+
+      <div class="col-12 panel">
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">Provider Health</div>
+            <div class="panel-desc">Click any provider name to drill down across all metrics</div>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="clean-table" id="ov-tbl-provider-health">
+            <thead>
+              <tr>
+                <th>Provider</th>
+                <th class="num">Requests</th>
+                <th class="num">Success</th>
+                <th class="num">Failed</th>
+                <th class="num">Error %</th>
+                <th class="num">P50</th>
+                <th class="num">P90</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       TAB 2: REQUESTS & MODELS
+       ========================================================================= -->
+  <div id="tab-requests_models" class="tab-pane" style="display:none">
+    <div class="section-grid">
+      <div class="col-4 panel">
+        <div class="panel-header">
+          <div class="panel-title">Provider Distribution</div>
+          <div class="panel-desc">Traffic share by upstream provider</div>
+        </div>
+        <div class="chart-box" id="rm-chart-provider"></div>
+      </div>
+
+      <div class="col-4 panel">
+        <div class="panel-header">
+          <div class="panel-title">Router Distribution</div>
+          <div class="panel-desc">Traffic share by router alias</div>
+        </div>
+        <div class="chart-box" id="rm-chart-router"></div>
+      </div>
+
+      <div class="col-4 panel">
+        <div class="panel-header">
+          <div class="panel-title">Attribution & Clients</div>
+          <div class="panel-desc">routed / direct / unattributed and top API keys</div>
+        </div>
+        <div class="chart-box" id="rm-chart-attr"></div>
+      </div>
+
+      <div class="col-12 panel">
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">Model Performance Table</div>
+            <div class="panel-desc">Click column header to sort · Click model name to drill down</div>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="clean-table" id="rm-tbl-model-perf">
+            <thead>
+              <tr>
+                <th>Provider</th>
+                <th class="sortable" onclick="sortModelTable('name')">Model</th>
+                <th class="num sortable" onclick="sortModelTable('calls')">Requests</th>
+                <th class="num sortable" onclick="sortModelTable('failed')">Failed</th>
+                <th class="num sortable" onclick="sortModelTable('error_rate')">Error %</th>
+                <th class="num sortable" onclick="sortModelTable('p50_latency_s')">P50 Latency</th>
+                <th class="num sortable" onclick="sortModelTable('p90_latency_s')">P90 Latency</th>
+                <th class="num sortable" onclick="sortModelTable('input_tokens')">Input Tokens</th>
+                <th class="num sortable" onclick="sortModelTable('output_tokens')">Output Tokens</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="col-12 panel">
+        <div class="panel-header">
+          <div class="panel-title">Provider × Model Mapping</div>
+          <div class="panel-desc">Relationship between Router Alias and actual Provider Model</div>
+        </div>
+        <div class="table-wrap">
+          <table class="clean-table" id="rm-tbl-mapping">
+            <thead>
+              <tr>
+                <th>Router Model (Alias)</th>
+                <th>Provider Model</th>
+                <th class="num">Requests</th>
+                <th class="num">Share %</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       TAB 3: PERFORMANCE
+       ========================================================================= -->
+  <div id="tab-performance" class="tab-pane" style="display:none">
+    <div class="kpi-grid">
+      <div class="stat-card">
+        <div class="stat-label">P50 Latency</div>
+        <div class="stat-value" id="pf-p50">–</div>
+        <div class="stat-sub">Median duration</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">P75 Latency</div>
+        <div class="stat-value" id="pf-p75">–</div>
+        <div class="stat-sub">75th percentile</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">P90 Latency</div>
+        <div class="stat-value" id="pf-p90">–</div>
+        <div class="stat-sub">90th percentile</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">P95 Latency</div>
+        <div class="stat-value" id="pf-p95">–</div>
+        <div class="stat-sub">95th percentile</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">P99 Latency</div>
+        <div class="stat-value" id="pf-p99" style="color:var(--warn)">–</div>
+        <div class="stat-sub">99th percentile</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Max Latency</div>
+        <div class="stat-value" id="pf-max" style="color:var(--bad)">–</div>
+        <div class="stat-sub">Slowest recorded</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">P50 TTFT</div>
+        <div class="stat-value" id="pf-ttft-p50">–</div>
+        <div class="stat-sub">First token median</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">P90 TTFT</div>
+        <div class="stat-value" id="pf-ttft-p90">–</div>
+        <div class="stat-sub">First token P90</div>
+      </div>
+    </div>
+
+    <div class="section-grid">
+      <div class="col-8 panel">
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">Latency Trend (Multi-Percentile)</div>
+            <div class="panel-desc">P50, P90, P95, P99 curves across time buckets</div>
+          </div>
+          <div style="display:flex;gap:6px">
+            <span class="badge" style="border-color:var(--cyan);color:var(--cyan)">[P50]</span>
+            <span class="badge" style="border-color:var(--accent);color:var(--accent)">[P90]</span>
+            <span class="badge" style="border-color:var(--warn);color:var(--warn)">[P95]</span>
+            <span class="badge" style="border-color:var(--bad);color:var(--bad)">[P99]</span>
+          </div>
+        </div>
+        <div class="chart-box" id="pf-chart-latency-trend"></div>
+      </div>
+
+      <div class="col-4 panel">
+        <div class="panel-header">
+          <div class="panel-title">Latency Distribution</div>
+          <div class="panel-desc">Histogram bins (&lt;1s to &gt;30m)</div>
+        </div>
+        <div class="chart-box" id="pf-chart-latency-dist"></div>
+      </div>
+
+      <div class="col-6 panel">
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">Latency vs TTFT Correlation</div>
+            <div class="panel-desc">Scatter distribution: X = Latency, Y = TTFT</div>
+          </div>
+        </div>
+        <div class="chart-box" id="pf-chart-scatter"></div>
+      </div>
+
+      <div class="col-6 panel">
+        <div class="panel-header">
+          <div class="panel-title">Executor Engine Performance</div>
+          <div class="panel-desc">OpenAICompat, Antigravity, OpenAI, Claude</div>
+        </div>
+        <div class="table-wrap">
+          <table class="clean-table" id="pf-tbl-executors">
+            <thead>
+              <tr>
+                <th>Executor Type</th>
+                <th class="num">Requests</th>
+                <th class="num">Error %</th>
+                <th class="num">P50 Latency</th>
+                <th class="num">P50 TTFT</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="col-12 panel">
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">Slowest Requests (Top Outliers)</div>
+            <div class="panel-desc">Click any request row to open Request Detail Drawer</div>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="clean-table" id="pf-tbl-slowest">
+            <thead>
+              <tr>
+                <th>Timestamp</th>
+                <th>Router Alias</th>
+                <th>Model</th>
+                <th>Provider</th>
+                <th class="num">Latency</th>
+                <th class="num">TTFT</th>
+                <th class="num">Tokens</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       TAB 4: TOKENS & EFFICIENCY
+       ========================================================================= -->
+  <div id="tab-tokens_efficiency" class="tab-pane" style="display:none">
+    <div class="kpi-grid">
+      <div class="stat-card">
+        <div class="stat-label">Total Input Tokens</div>
+        <div class="stat-value" id="te-in-tokens">–</div>
+        <div class="stat-sub">Prompt context tokens</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Total Output Tokens</div>
+        <div class="stat-value" id="te-out-tokens">–</div>
+        <div class="stat-sub">Generated output tokens</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Total Reasoning Tokens</div>
+        <div class="stat-value" id="te-reasoning-tokens" style="color:var(--purple)">–</div>
+        <div class="stat-sub">Thinking model tokens</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Total Cached Tokens</div>
+        <div class="stat-value" id="te-cached-tokens" style="color:var(--ok)">–</div>
+        <div class="stat-sub">Prompt cache hits</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Requests With Cache</div>
+        <div class="stat-value" id="te-cached-reqs">–</div>
+        <div class="stat-sub">Calls using cache</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Cache Hit Rate</div>
+        <div class="stat-value" id="te-cache-rate" style="color:var(--ok)">–</div>
+        <div class="stat-sub">Percentage of cached calls</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Cache Creation Tokens</div>
+        <div class="stat-value" id="te-cache-creation">0</div>
+        <div class="stat-sub">Explicit cache write tokens</div>
+      </div>
+    </div>
+
+    <div class="section-grid">
+      <div class="col-8 panel">
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">Token Volume Over Time</div>
+            <div class="panel-desc">Input Context vs Output Generated Tokens</div>
+          </div>
+          <div style="display:flex;gap:6px">
+            <span class="badge" style="border-color:var(--purple);color:var(--purple)">[Input]</span>
+            <span class="badge" style="border-color:var(--ok);color:var(--ok)">[Output]</span>
+          </div>
+        </div>
+        <div class="chart-box" id="te-chart-token-trend"></div>
+      </div>
+
+      <div class="col-4 panel">
+        <div class="panel-header">
+          <div class="panel-title">Input Token Distribution</div>
+          <div class="panel-desc">Context size bins (&lt;1K to &gt;400K)</div>
+        </div>
+        <div class="chart-box" id="te-chart-token-dist"></div>
+      </div>
+
+      <div class="col-12 panel">
+        <div class="panel-header">
+          <div class="panel-title">Token & Cache Analytics by Model</div>
+          <div class="panel-desc">Breakdown of prompt, output, reasoning and cache hit rates</div>
+        </div>
+        <div class="table-wrap">
+          <table class="clean-table" id="te-tbl-model-tokens">
+            <thead>
+              <tr>
+                <th>Model</th>
+                <th class="num">Requests</th>
+                <th class="num">Input Tokens</th>
+                <th class="num">Output Tokens</th>
+                <th class="num">Reasoning</th>
+                <th class="num">Cached Tokens</th>
+                <th class="num">Avg In/Req</th>
+                <th class="num">Avg Out/Req</th>
+                <th class="num">Cache Hit %</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="col-12 panel">
+        <div class="panel-header">
+          <div class="panel-title">Reasoning Effort × Performance</div>
+          <div class="panel-desc">Impact of reasoning effort on latency and token metrics</div>
+        </div>
+        <div class="table-wrap">
+          <table class="clean-table" id="te-tbl-reasoning-perf">
+            <thead>
+              <tr>
+                <th>Reasoning Effort</th>
+                <th class="num">Requests</th>
+                <th class="num">P50 Latency</th>
+                <th class="num">P90 Latency</th>
+                <th class="num">Input Tokens</th>
+                <th class="num">Output Tokens</th>
+                <th class="num">Reasoning Tokens</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       TAB 5: TRA CỨU REQUESTS (Realtime Log & Drawer)
+       ========================================================================= -->
+  <div id="tab-requests_log" class="tab-pane" style="display:none">
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">Tra cứu Requests (Realtime Log)</div>
+          <div class="panel-desc">Click any row to open Request Detail Drawer and decode root cause</div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn-text" onclick="loadRequestsPage(-1)">Prev</button>
+          <span class="badge" id="req-page-info">Page 1 / 1</span>
+          <button class="btn-text" onclick="loadRequestsPage(1)">Next</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="clean-table" id="tbl-requests">
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>Router Alias</th>
+              <th>Model</th>
+              <th>Provider</th>
+              <th>API Key</th>
+              <th>Effort</th>
+              <th class="num">Latency</th>
+              <th class="num">Tokens</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal / Drawer for Request Detail & Error Cause -->
+<div class="modal-backdrop" id="modal-detail" onclick="if(event.target===this)closeDetail()">
+  <div class="modal-content">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h3 style="font-size:14px;font-weight:700">Request Detail</h3>
+      <button class="btn-text" onclick="closeDetail()">Close</button>
+    </div>
+    <div id="detail-body"></div>
+  </div>
+</div>
+
+<div class="chart-tooltip" id="tooltip"></div>
+
+<script>
+// ---- cpa auth & storage resolution -----------------------------------------
+var SALT = "cli-proxy-api-webui::secure-storage";
+var PREFIX = "enc::v1::";
+
+function decodeObfuscated(val) {
+  if (!val || typeof val !== "string") return "";
+  if (val.slice(0, PREFIX.length) === PREFIX) {
+    try {
+      var b64 = val.slice(PREFIX.length);
+      var raw = (typeof atob === "function") ? atob(b64) : Buffer.from(b64, "base64").toString("binary");
+      var host = (window && window.location && window.location.host) || "";
+      var ua = (navigator && navigator.userAgent) || "";
+      var salt = SALT + "|" + host + "|" + ua;
+      var out = "";
+      for (var i = 0; i < raw.length; i++) {
+        out += String.fromCharCode(raw.charCodeAt(i) ^ salt.charCodeAt(i % salt.length));
+      }
+      return out;
+    } catch (e) { return ""; }
+  }
+  return val;
+}
+
+function extractKeyFromJson(str) {
+  if (!str) return "";
+  try {
+    var obj = JSON.parse(str);
+    if (obj && typeof obj === "object") {
+      if (obj.state && obj.state.managementKey) return String(obj.state.managementKey).trim();
+      if (obj.managementKey) return String(obj.managementKey).trim();
+    }
+  } catch (e) {
+    return String(str).trim();
+  }
+  return "";
+}
+
+function cpaStoredManagementKey() {
+  var storages = [];
+  if (typeof localStorage !== "undefined") storages.push(localStorage);
+  if (typeof sessionStorage !== "undefined") storages.push(sessionStorage);
+  var knownKeys = ["cli-proxy-auth", "managementKey", "cpa_mgmt_key"];
+  for (var s = 0; s < storages.length; s++) {
+    var st = storages[s];
+    for (var k = 0; k < knownKeys.length; k++) {
+      var raw = st.getItem(knownKeys[k]);
+      if (raw) {
+        var dec = decodeObfuscated(raw);
+        var res = extractKeyFromJson(dec);
+        if (res) return res;
+      }
+    }
+  }
+  return "";
+}
+
+function mgmtKeyCandidates() {
+  var list = [];
+  var k = cpaStoredManagementKey();
+  if (k) list.push(k);
+  return list;
+}
+
+// ---- theme & preferences ---------------------------------------------------
+function toggleTheme() {
+  var html = document.documentElement;
+  var cur = html.getAttribute("data-theme") || "dark";
+  var next = cur === "dark" ? "light" : "dark";
+  html.setAttribute("data-theme", next);
+  if (typeof localStorage !== "undefined") localStorage.setItem("cpa_theme", next);
+  if (state.rawSummary) renderAllViews();
+}
+
+// ---- error-log decode + readable rendering ---------------------------------
+function decodeHtmlEntities(str) {
+  if (!str) return "";
+  return str
+    .replace(/&#34;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
+}
+
+function parseCpaError(rawLog) {
+  var out = { code: "", type: "", message: "", status: 0, trace: "", raw: "" };
+  if (!rawLog) return out;
+  var tm = rawLog.match(/X-Cpa-Trace-Id:\s*([^\r\n]+)/i);
+  if (tm) out.trace = tm[1].trim();
+  var sm = rawLog.match(/Status:\s*(\d+)/i);
+  if (sm) out.status = parseInt(sm[1], 10);
+
+  var pos = 0;
+  while (pos < rawLog.length) {
+    var sub = rawLog.slice(pos);
+    var em = sub.search(/\{\s*["']error["']\s*:\s*\{/);
+    if (em === -1) break;
+    var start = pos + em;
+    var depth = 0, inStr = false, esc = false, end = -1;
+    for (var i = start; i < rawLog.length; i++) {
+      var ch = rawLog[i];
+      if (inStr) {
+        if (esc) esc = false;
+        else if (ch === '\\') esc = true;
+        else if (ch === '"') inStr = false;
+      } else {
+        if (ch === '"') inStr = true;
+        else if (ch === '{') depth++;
+        else if (ch === '}') {
+          depth--;
+          if (depth === 0) { end = i + 1; break; }
+        }
+      }
+    }
+    if (end > start) {
+      try {
+        var rawJson = rawLog.slice(start, end);
+        var parsed = JSON.parse(rawJson);
+        if (parsed && parsed.error) {
+          out.raw = rawJson;
+          out.code = parsed.error.code || "";
+          out.type = parsed.error.type || "";
+          out.message = parsed.error.message || "";
+          break;
+        }
+      } catch (e) {}
+      pos = end;
+    } else {
+      pos = start + 10;
+    }
+  }
+  return out;
+}
+
+function extractHints(msg) {
+  var hints = [];
+  if (!msg) return hints;
+  var dm = msg.match(/(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2}))/);
+  if (dm) {
+    var t = new Date(dm[1]);
+    if (!isNaN(t.getTime())) {
+      hints.push({ label: "Resets At", value: t.toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" }) });
+    }
+  }
+  var mm = msg.match(/['"]([A-Za-z0-9._-]+)['"]\s+to keep going/i) || msg.match(/Use the paid model ['"]([A-Za-z0-9._-]+)['"]/i);
+  if (mm) hints.push({ label: "Suggested Model", value: mm[1] });
+  return hints;
+}
+
+function loadErrorLog(r) {
+  loadErrorLogForDetail(r);
+}
+
+// ---- api client ------------------------------------------------------------
+function resolveManagementKey() {
+  var params = (typeof window !== "undefined" && window.location && window.location.search) ? new URLSearchParams(window.location.search) : null;
+  var k = params ? (params.get("key") || params.get("k")) : null;
+  if (k) return k;
+  if (typeof window !== "undefined" && window.location && window.location.hash) {
+    var hm = window.location.hash.match(/[?&]key=([^&]+)/);
+    if (hm) return decodeURIComponent(hm[1]);
+  }
+  var stored = cpaStoredManagementKey();
+  if (stored) return stored;
+  return "";
+}
+
+var currentMgmtKey = resolveManagementKey();
+
+function api(path) {
+  var headers = { "Content-Type": "application/json" };
+  if (currentMgmtKey) headers["Authorization"] = "Bearer " + currentMgmtKey;
+  return fetch("/v0/management/plugins/usage-statistics" + path, { headers: headers })
+    .then(function(res) {
+      if (res.status === 401) {
+        var manual = prompt("Vui lòng nhập Management Key của CPA để xem dữ liệu:");
+        if (manual) {
+          currentMgmtKey = manual.trim();
+          if (typeof localStorage !== "undefined") localStorage.setItem("cpa_mgmt_key", currentMgmtKey);
+          return api(path);
+        }
+        throw new Error("HTTP 401 Unauthorized");
+      }
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      return res.json();
+    });
+}
+
+// ---- formatters ------------------------------------------------------------
+function formatDurationS(sec) {
+  if (sec === null || sec === undefined || isNaN(sec)) return "–";
+  if (sec < 0.001 && sec > 0) return (sec * 1e6).toFixed(0) + "µs";
+  if (sec < 1) return (sec * 1000).toFixed(0) + "ms";
+  if (sec < 60) return sec.toFixed(1) + "s";
+  if (sec < 3600) return (sec / 60).toFixed(1) + "m";
+  return (sec / 3600).toFixed(1) + "h";
+}
+
+function n(num) {
+  if (num === null || num === undefined || isNaN(num)) return "0";
+  return Number(num).toLocaleString("vi-VN");
+}
+
+function nTok(num) {
+  if (!num) return "0";
+  if (num >= 1e9) return (num / 1e9).toFixed(2) + "B";
+  if (num >= 1e6) return (num / 1e6).toFixed(2) + "M";
+  if (num >= 1e3) return (num / 1e3).toFixed(1) + "k";
+  return n(num);
+}
+
+function esc(str) {
+  if (str === null || str === undefined) return "";
+  return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+// ---- state & filter management ---------------------------------------------
+var state = {
+  timeRange: "7d",
+  provider: "",
+  model: "",
+  router: "",
+  apiKey: "",
+  attribution: "",
+  effort: "",
+  executor: "",
+  status: "",
+  statusCode: "",
+  tab: "overview",
+  reqOffset: 0,
+  reqLimit: 50,
+  rawSummary: null,
+  modelSortCol: "calls",
+  modelSortAsc: false
+};
+
+function setTime(r) {
+  state.timeRange = r;
+  document.querySelectorAll(".pill-btn").forEach(function(btn) {
+    btn.classList.toggle("active", btn.getAttribute("data-time") === r);
+  });
+  refreshData();
+}
+
+function applyFilters() {
+  state.provider = document.getElementById("fltProvider").value;
+  state.model = document.getElementById("fltModel").value;
+  state.router = document.getElementById("fltRouter").value;
+  state.apiKey = document.getElementById("fltKey").value;
+  state.attribution = document.getElementById("fltAttribution").value;
+  state.effort = document.getElementById("fltEffort").value;
+  state.executor = document.getElementById("fltExecutor").value;
+  state.status = document.getElementById("fltStatus").value;
+  state.statusCode = document.getElementById("fltStatusCode").value;
+  renderAllViews();
+}
+
+function resetFilters() {
+  document.getElementById("fltProvider").value = "";
+  document.getElementById("fltModel").value = "";
+  document.getElementById("fltRouter").value = "";
+  document.getElementById("fltKey").value = "";
+  document.getElementById("fltAttribution").value = "";
+  document.getElementById("fltEffort").value = "";
+  document.getElementById("fltExecutor").value = "";
+  document.getElementById("fltStatus").value = "";
+  document.getElementById("fltStatusCode").value = "";
+  applyFilters();
+}
+
+function drillDown(field, val) {
+  if (field === "provider") {
+    document.getElementById("fltProvider").value = val;
+    state.provider = val;
+  } else if (field === "model") {
+    document.getElementById("fltModel").value = val;
+    state.model = val;
+  } else if (field === "status_code") {
+    document.getElementById("fltStatusCode").value = String(val);
+    state.statusCode = String(val);
+  }
+  renderAllViews();
+}
+
+function switchTab(tabId) {
+  state.tab = tabId;
+  document.querySelectorAll(".tab-btn").forEach(function(b) {
+    b.classList.toggle("active", b.getAttribute("data-tab") === tabId);
+  });
+  document.querySelectorAll(".tab-pane").forEach(function(p) {
+    p.style.display = (p.id === "tab-" + tabId) ? "block" : "none";
+  });
+  if (tabId === "requests_log") loadRequests();
+  else renderAllViews();
+}
+
+function refreshData() {
+  var now = new Date();
+  var start = null;
+  if (state.timeRange === "1h") start = new Date(now.getTime() - 1 * 3600 * 1000);
+  else if (state.timeRange === "6h") start = new Date(now.getTime() - 6 * 3600 * 1000);
+  else if (state.timeRange === "24h") start = new Date(now.getTime() - 24 * 3600 * 1000);
+  else if (state.timeRange === "7d") start = new Date(now.getTime() - 7 * 24 * 3600 * 1000);
+
+  var url = "/usage/summary?source=router";
+  if (start) url += "&start=" + encodeURIComponent(start.toISOString());
+
+  api(url).then(function(data) {
+    state.rawSummary = data;
+    populateFilterDropdowns(data);
+    renderAllViews();
+  }).catch(function(err) {
+    console.error("Summary fetch error:", err);
+  });
+}
+
+function populateFilterDropdowns(data) {
+  populateSelect("fltProvider", data.by_provider, "Provider");
+  populateSelect("fltModel", data.by_model, "Model");
+  populateSelect("fltRouter", data.by_alias, "Router");
+  populateSelect("fltKey", data.by_api_key, "API Key");
+  populateSelect("fltExecutor", data.by_executor, "Executor");
+}
+
+function populateSelect(id, items, label) {
+  var sel = document.getElementById(id);
+  var cur = sel.value;
+  sel.innerHTML = '<option value="">' + label + ': All</option>';
+  if (!items) return;
+  items.forEach(function(it) {
+    var opt = document.createElement("option");
+    opt.value = it.name;
+    opt.textContent = it.name + " (" + n(it.calls) + ")";
+    if (it.name === cur) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+
+function renderAllViews() {
+  if (!state.rawSummary) return;
+  var d = state.rawSummary;
+  if (state.tab === "overview") renderOverview(d);
+  else if (state.tab === "requests_models") renderRequestsModels(d);
+  else if (state.tab === "performance") renderPerformance(d);
+  else if (state.tab === "tokens_efficiency") renderTokensEfficiency(d);
+}
+
+// ==========================================================================
+// RENDER TAB 1: OVERVIEW
+// ==========================================================================
+function renderOverview(d) {
+  var t = d.totals || {};
+  document.getElementById("ov-total").textContent = n(t.calls);
+  document.getElementById("ov-success").textContent = n(t.success || (t.calls - t.failed));
+  document.getElementById("ov-failed").textContent = n(t.failed);
+  document.getElementById("ov-error-rate").textContent = (t.error_rate !== undefined ? t.error_rate.toFixed(1) : ((t.failed/t.calls)*100).toFixed(1)) + "%";
+  document.getElementById("ov-latency").textContent = formatDurationS(t.p50_latency_s) + " / " + formatDurationS(t.p90_latency_s);
+  document.getElementById("ov-ttft").textContent = formatDurationS(t.p50_ttft_s);
+  document.getElementById("ov-in-tokens").textContent = nTok(t.input_tokens);
+  document.getElementById("ov-out-tokens").textContent = nTok(t.output_tokens);
+
+  renderTimelineArea("ov-chart-volume", d.by_hour, [
+    { key: "success", label: "Success", color: "#10b981" },
+    { key: "failed", label: "Failed", color: "#f43f5e" }
+  ]);
+
+  renderHorizontalBar("ov-chart-errors", (d.status_codes || []).map(function(s) {
+    return { name: "HTTP " + s.status_code, calls: s.calls, val: s.status_code };
+  }), "#f43f5e", "status_code");
+
+  var tbody = document.querySelector("#ov-tbl-provider-health tbody");
+  var html = "";
+  (d.by_provider || []).forEach(function(p) {
+    html += '<tr>' +
+      '<td><span class="clickable-item" onclick="drillDown(\'provider\',\'' + esc(p.name) + '\')">' + esc(p.name) + '</span></td>' +
+      '<td class="num">' + n(p.calls) + '</td>' +
+      '<td class="num" style="color:var(--ok)">' + n(p.success || (p.calls - p.failed)) + '</td>' +
+      '<td class="num" style="color:' + (p.failed ? 'var(--bad)' : 'var(--text)') + '">' + n(p.failed) + '</td>' +
+      '<td class="num" style="color:' + (p.failed ? 'var(--bad)' : 'var(--ok)') + '">' + (p.error_rate||0).toFixed(1) + '%</td>' +
+      '<td class="num">' + formatDurationS(p.p50_latency_s) + '</td>' +
+      '<td class="num">' + formatDurationS(p.p90_latency_s) + '</td>' +
+      '</tr>';
+  });
+  tbody.innerHTML = html;
+}
+
+// ==========================================================================
+// RENDER TAB 2: REQUESTS & MODELS
+// ==========================================================================
+function renderRequestsModels(d) {
+  renderHorizontalBar("rm-chart-provider", d.by_provider || [], "#6366f1", "provider");
+  renderHorizontalBar("rm-chart-router", d.by_alias || [], "#a855f7", "router");
+  renderHorizontalBar("rm-chart-attr", (d.by_attribution || []).concat(d.by_api_key || []).slice(0, 8), "#06b6d4");
+
+  renderModelPerfTable(d.by_model || []);
+
+  var mapTbody = document.querySelector("#rm-tbl-mapping tbody");
+  var mapHtml = "";
+  var tCalls = (d.totals && d.totals.calls) || 1;
+  (d.router_mappings || []).slice(0, 15).forEach(function(m) {
+    mapHtml += '<tr><td><strong>' + esc(m.alias || 'Direct / No Router') + '</strong></td><td>' + esc(m.model) + '</td><td class="num">' + n(m.calls) + '</td><td class="num">' + ((m.calls / tCalls)*100).toFixed(1) + '%</td></tr>';
+  });
+  mapTbody.innerHTML = mapHtml || '<tr><td colspan="4" style="text-align:center;color:var(--text-muted)">No routing records</td></tr>';
+}
+
+function renderModelPerfTable(models) {
+  var list = models.slice();
+  list.sort(function(a, b) {
+    var va = a[state.modelSortCol], vb = b[state.modelSortCol];
+    if (typeof va === "string") return state.modelSortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+    return state.modelSortAsc ? (va - vb) : (vb - va);
+  });
+
+  var tbody = document.querySelector("#rm-tbl-model-perf tbody");
+  var html = "";
+  list.forEach(function(m) {
+    html += '<tr>' +
+      '<td>' + esc(m.sub || '–') + '</td>' +
+      '<td><span class="clickable-item" onclick="drillDown(\'model\',\'' + esc(m.name) + '\')">' + esc(m.name) + '</span></td>' +
+      '<td class="num">' + n(m.calls) + '</td>' +
+      '<td class="num" style="color:' + (m.failed ? 'var(--bad)' : 'var(--text)') + '">' + n(m.failed) + '</td>' +
+      '<td class="num" style="color:' + (m.failed ? 'var(--bad)' : 'var(--ok)') + '">' + (m.error_rate||0).toFixed(1) + '%</td>' +
+      '<td class="num">' + formatDurationS(m.p50_latency_s) + '</td>' +
+      '<td class="num">' + formatDurationS(m.p90_latency_s) + '</td>' +
+      '<td class="num">' + nTok(m.input_tokens) + '</td>' +
+      '<td class="num">' + nTok(m.output_tokens) + '</td>' +
+      '</tr>';
+  });
+  tbody.innerHTML = html;
+}
+
+function sortModelTable(col) {
+  if (state.modelSortCol === col) state.modelSortAsc = !state.modelSortAsc;
+  else { state.modelSortCol = col; state.modelSortAsc = false; }
+  if (state.rawSummary) renderModelPerfTable(state.rawSummary.by_model || []);
+}
+
+// ==========================================================================
+// RENDER TAB 3: PERFORMANCE
+// ==========================================================================
+function renderPerformance(d) {
+  var t = d.totals || {};
+  document.getElementById("pf-p50").textContent = formatDurationS(t.p50_latency_s);
+  document.getElementById("pf-p75").textContent = formatDurationS(t.p75_latency_s);
+  document.getElementById("pf-p90").textContent = formatDurationS(t.p90_latency_s);
+  document.getElementById("pf-p95").textContent = formatDurationS(t.p95_latency_s);
+  document.getElementById("pf-p99").textContent = formatDurationS(t.p99_latency_s);
+  document.getElementById("pf-max").textContent = formatDurationS(t.max_latency_s);
+  document.getElementById("pf-ttft-p50").textContent = formatDurationS(t.p50_ttft_s);
+  document.getElementById("pf-ttft-p90").textContent = formatDurationS(t.p90_ttft_s);
+
+  renderTimelineArea("pf-chart-latency-trend", d.by_hour, [
+    { key: "p50_latency_s", label: "P50", color: "#06b6d4" },
+    { key: "p90_latency_s", label: "P90", color: "#6366f1" },
+    { key: "p95_latency_s", label: "P95", color: "#f59e0b" },
+    { key: "p99_latency_s", label: "P99", color: "#f43f5e" }
+  ]);
+
+  renderHistogram("pf-chart-latency-dist", d.latency_distribution || [], "#f59e0b");
+  renderScatterPlot("pf-chart-scatter", d.scatter_points || []);
+
+  var exTbody = document.querySelector("#pf-tbl-executors tbody");
+  var exHtml = "";
+  (d.by_executor || []).forEach(function(e) {
+    exHtml += '<tr>' +
+      '<td><strong>' + esc(e.name) + '</strong></td>' +
+      '<td class="num">' + n(e.calls) + '</td>' +
+      '<td class="num" style="color:' + (e.failed ? 'var(--bad)' : 'var(--ok)') + '">' + (e.error_rate||0).toFixed(1) + '%</td>' +
+      '<td class="num">' + formatDurationS(e.p50_latency_s) + '</td>' +
+      '<td class="num">' + formatDurationS(e.p50_ttft_s) + '</td>' +
+      '</tr>';
+  });
+  exTbody.innerHTML = exHtml;
+
+  var slTbody = document.querySelector("#pf-tbl-slowest tbody");
+  var slHtml = "";
+  (d.slowest_requests || []).slice(0, 15).forEach(function(r) {
+    var statusBadge = r.failed ? '<span class="badge badge-bad">HTTP ' + r.failure_status_code + '</span>' : '<span class="badge badge-ok">OK</span>';
+    slHtml += '<tr style="cursor:pointer" onclick=\'showDetail(' + JSON.stringify(r) + ')\'>' +
+      '<td>' + (r.timestamp ? r.timestamp.slice(5, 19).replace('T', ' ') : '–') + '</td>' +
+      '<td><strong>' + esc(r.alias || 'Direct / No Router') + '</strong></td>' +
+      '<td>' + esc(r.model) + '</td>' +
+      '<td>' + esc(r.provider) + '</td>' +
+      '<td class="num" style="color:var(--bad);font-weight:700">' + formatDurationS(r.latency_ms / 1000) + '</td>' +
+      '<td class="num">' + formatDurationS(r.ttft_ms / 1000) + '</td>' +
+      '<td class="num">' + nTok(r.tokens.total_tokens) + '</td>' +
+      '<td>' + statusBadge + '</td>' +
+      '</tr>';
+  });
+  slTbody.innerHTML = slHtml;
+}
+
+// ==========================================================================
+// RENDER TAB 4: TOKENS & EFFICIENCY
+// ==========================================================================
+function renderTokensEfficiency(d) {
+  var t = d.totals || {};
+  document.getElementById("te-in-tokens").textContent = nTok(t.input_tokens);
+  document.getElementById("te-out-tokens").textContent = nTok(t.output_tokens);
+  document.getElementById("te-reasoning-tokens").textContent = nTok(t.reasoning_tokens);
+  document.getElementById("te-cached-tokens").textContent = nTok(t.cached_tokens);
+  document.getElementById("te-cached-reqs").textContent = n(t.cache_hit_calls);
+  var hitRate = t.calls ? ((t.cache_hit_calls / t.calls) * 100).toFixed(1) + "%" : "0%";
+  document.getElementById("te-cache-rate").textContent = hitRate;
+
+  renderTimelineArea("te-chart-token-trend", d.by_hour, [
+    { key: "input_tokens", label: "Input", color: "#a855f7" },
+    { key: "output_tokens", label: "Output", color: "#10b981" }
+  ]);
+
+  renderHistogram("te-chart-token-dist", d.token_distribution || [], "#a855f7");
+
+  var mTbody = document.querySelector("#te-tbl-model-tokens tbody");
+  var mHtml = "";
+  (d.by_model || []).slice(0, 15).forEach(function(m) {
+    var avgIn = m.calls ? Math.round(m.input_tokens / m.calls) : 0;
+    var avgOut = m.calls ? Math.round(m.output_tokens / m.calls) : 0;
+    var hit = m.calls ? (((m.cache_hit_calls || 0) / m.calls) * 100).toFixed(1) + "%" : "0%";
+    mHtml += '<tr>' +
+      '<td><strong>' + esc(m.name) + '</strong></td>' +
+      '<td class="num">' + n(m.calls) + '</td>' +
+      '<td class="num">' + nTok(m.input_tokens) + '</td>' +
+      '<td class="num">' + nTok(m.output_tokens) + '</td>' +
+      '<td class="num">' + nTok(m.reasoning_tokens) + '</td>' +
+      '<td class="num">' + nTok(m.cached_tokens) + '</td>' +
+      '<td class="num">' + n(avgIn) + '</td>' +
+      '<td class="num">' + n(avgOut) + '</td>' +
+      '<td class="num" style="color:var(--ok)">' + hit + '</td>' +
+      '</tr>';
+  });
+  mTbody.innerHTML = mHtml;
+
+  var rTbody = document.querySelector("#te-tbl-reasoning-perf tbody");
+  var rHtml = "";
+  (d.by_effort || []).forEach(function(e) {
+    rHtml += '<tr>' +
+      '<td><span class="badge badge-accent">' + esc(e.name || 'Not Specified') + '</span></td>' +
+      '<td class="num">' + n(e.calls) + '</td>' +
+      '<td class="num">' + formatDurationS(e.p50_latency_s) + '</td>' +
+      '<td class="num">' + formatDurationS(e.p90_latency_s) + '</td>' +
+      '<td class="num">' + nTok(e.input_tokens) + '</td>' +
+      '<td class="num">' + nTok(e.output_tokens) + '</td>' +
+      '<td class="num" style="color:var(--purple)">' + nTok(e.reasoning_tokens) + '</td>' +
+      '</tr>';
+  });
+  rTbody.innerHTML = rHtml;
+}
+
+// ==========================================================================
+// RENDER TAB 5: REQUESTS LOG & DETAIL DRAWER
+// ==========================================================================
+function loadRequests() {
+  loadRequestsPage(0);
+}
+
+function loadRequestsPage(delta) {
+  if (delta === 1) state.reqOffset += state.reqLimit;
+  else if (delta === 0) state.reqOffset = 0;
+  else if (delta === -1) state.reqOffset = Math.max(0, state.reqOffset - state.reqLimit);
+
+  var url = "/usage/requests?source=router&limit=" + state.reqLimit + "&offset=" + state.reqOffset;
+  if (state.provider) url += "&provider=" + encodeURIComponent(state.provider);
+  if (state.router) url += "&alias=" + encodeURIComponent(state.router);
+  if (state.model) url += "&model=" + encodeURIComponent(state.model);
+  if (state.apiKey) url += "&api_key=" + encodeURIComponent(state.apiKey);
+  if (state.attribution) url += "&attribution=" + encodeURIComponent(state.attribution);
+  if (state.effort) url += "&reasoning_effort=" + encodeURIComponent(state.effort);
+  if (state.executor) url += "&executor=" + encodeURIComponent(state.executor);
+  if (state.status) url += "&result=" + encodeURIComponent(state.status);
+  if (state.statusCode) url += "&status_code=" + encodeURIComponent(state.statusCode);
+
+  api(url).then(function(page) {
+    var rows = page.rows || [];
+    var tbody = document.querySelector("#tbl-requests tbody");
+    var html = "";
+    rows.forEach(function(r) {
+      var statusBadge = r.failed ? '<span class="badge badge-bad">HTTP ' + r.failure_status_code + '</span>' : '<span class="badge badge-ok">OK</span>';
+      html += '<tr style="cursor:pointer" onclick=\'showDetail(' + JSON.stringify(r) + ')\'>' +
+        '<td>' + (r.timestamp ? r.timestamp.slice(5, 19).replace('T', ' ') : '–') + '</td>' +
+        '<td><strong>' + esc(r.alias || 'Direct / No Router') + '</strong></td>' +
+        '<td>' + esc(r.model) + '</td>' +
+        '<td>' + esc(r.provider) + '</td>' +
+        '<td><code>' + esc(r.api_key) + '</code></td>' +
+        '<td><span class="badge">' + esc(r.reasoning_effort || 'Not Specified') + '</span></td>' +
+        '<td class="num">' + formatDurationS(r.latency_ms / 1000) + '</td>' +
+        '<td class="num">' + nTok(r.tokens.total_tokens) + '</td>' +
+        '<td>' + statusBadge + '</td>' +
+        '</tr>';
+    });
+    tbody.innerHTML = html || '<tr><td colspan="9" style="text-align:center;color:var(--text-muted)">No matching records</td></tr>';
+    var pageNum = Math.floor(state.reqOffset / state.reqLimit) + 1;
+    var totalPages = Math.ceil((page.total || 0) / state.reqLimit) || 1;
+    document.getElementById("req-page-info").textContent = "Page " + pageNum + " / " + totalPages + " (" + n(page.total) + " requests)";
+  });
+}
+
+function showDetail(r) {
+  var modal = document.getElementById("modal-detail");
+  var body = document.getElementById("detail-body");
+  var statusBadge = r.failed ? '<span class="badge badge-bad">FAILED HTTP ' + r.failure_status_code + '</span>' : '<span class="badge badge-ok">SUCCESS 200 OK</span>';
+
+  var html = '<div class="detail-row"><div class="detail-k">Status</div><div class="detail-v">' + statusBadge + '</div></div>' +
+    '<div class="detail-row"><div class="detail-k">Timestamp</div><div class="detail-v">' + esc(r.timestamp) + '</div></div>' +
+    '<div class="detail-row"><div class="detail-k">Sequence ID</div><div class="detail-v">#' + (r.sequence || r.id) + '</div></div>' +
+    '<div class="detail-row"><div class="detail-k">Router Model</div><div class="detail-v"><strong>' + esc(r.alias || 'Direct / No Router') + '</strong></div></div>' +
+    '<div class="detail-row"><div class="detail-k">Provider Model</div><div class="detail-v">' + esc(r.model) + '</div></div>' +
+    '<div class="detail-row"><div class="detail-k">Provider</div><div class="detail-v">' + esc(r.provider) + '</div></div>' +
+    '<div class="detail-row"><div class="detail-k">API Key</div><div class="detail-v"><code>' + esc(r.api_key) + '</code></div></div>' +
+    '<div class="detail-row"><div class="detail-k">Attribution</div><div class="detail-v"><span class="badge">' + esc(r.source || 'unattributed') + '</span></div></div>' +
+    '<div class="detail-row"><div class="detail-k">Reasoning / Tier</div><div class="detail-v">' + esc(r.reasoning_effort || 'Not Specified') + ' · Tier: ' + esc(r.service_tier || 'auto') + '</div></div>' +
+    '<div class="detail-row"><div class="detail-k">Executor</div><div class="detail-v">' + esc(r.executor_type || 'OpenAICompat') + '</div></div>' +
+    '<div class="detail-row"><div class="detail-k">Latency / TTFT</div><div class="detail-v">' + formatDurationS(r.latency_ms/1000) + ' (TTFT: ' + formatDurationS(r.ttft_ms/1000) + ')</div></div>' +
+    '<div class="detail-row"><div class="detail-k">Tokens</div><div class="detail-v">Input: ' + n(r.tokens.input_tokens) + ' · Output: ' + n(r.tokens.output_tokens) + ' · Reasoning: ' + n(r.tokens.reasoning_tokens) + ' · Cache: ' + n(r.tokens.cached_tokens) + '</div></div>';
+
+  if (r.failed) {
+    html += '<div id="drawer-error-log" style="margin-top:10px"><span class="badge badge-warn">Searching error logs…</span></div>';
+  }
+  body.innerHTML = html;
+  modal.style.display = "flex";
+
+  if (r.failed) {
+    loadErrorLogForDetail(r);
+  }
+}
+
+function closeDetail() {
+  document.getElementById("modal-detail").style.display = "none";
+}
+
+function loadErrorLogForDetail(r) {
+  var holder = document.getElementById("drawer-error-log");
+  if (!holder) return;
+  var ts = r.timestamp || "";
+  api("/error-log?ts=" + encodeURIComponent(ts) + "&status=" + (r.failure_status_code || "")).then(function(res) {
+    if (!res.files || !res.files.length) {
+      holder.innerHTML = '<div class="note-callout">No matching error log files found within ±100s of this request.</div>';
+      return;
+    }
+    var first = res.files[0].name;
+    return api("/error-log?file=" + encodeURIComponent(first)).then(function(content) {
+      var raw = content && content.content ? content.content : JSON.stringify(content);
+      var decoded = decodeHtmlEntities(raw);
+      var err = parseCpaError(decoded);
+
+      var logHtml = '<div class="error-cause-card">' +
+        '<div class="error-cause-title">Root Cause (Decoded)</div>';
+      if (err.code) logHtml += '<div class="detail-row"><div class="detail-k">Error Code</div><div class="detail-v"><code>' + esc(err.code) + '</code></div></div>';
+      if (err.type) logHtml += '<div class="detail-row"><div class="detail-k">Error Type</div><div class="detail-v">' + esc(err.type) + '</div></div>';
+      if (err.message) logHtml += '<div class="detail-row"><div class="detail-k">Details</div><div class="detail-v" style="color:var(--text)">' + esc(err.message) + '</div></div>';
+      extractHints(err.message).forEach(function(h) {
+        logHtml += '<div class="detail-row"><div class="detail-k" style="color:var(--ok)">' + esc(h.label) + '</div><div class="detail-v" style="color:var(--ok);font-weight:600">' + esc(h.value) + '</div></div>';
+      });
+      if (err.trace) logHtml += '<div class="detail-row"><div class="detail-k">CPA Trace</div><div class="detail-v"><code>' + esc(err.trace) + '</code></div></div>';
+      logHtml += '</div>';
+
+      logHtml += '<details style="margin-top:8px"><summary style="cursor:pointer;font-size:11px;color:var(--text-muted)">View Raw CPA Log</summary>' +
+        '<pre style="margin-top:6px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;font-size:10px;max-height:220px;overflow:auto;white-space:pre-wrap;word-break:break-all">' + esc(decoded) + '</pre></details>';
+
+      holder.innerHTML = logHtml;
+    });
+  }).catch(function(e) {
+    holder.innerHTML = '<div class="note-callout">Unable to read error log: ' + esc(e.message) + '</div>';
+  });
+}
+
+// ==========================================================================
+// SVG CHART GENERATORS
+// ==========================================================================
+function renderTimelineArea(containerId, data, series) {
+  var box = document.getElementById(containerId);
+  if (!box) return;
+  if (!data || !data.length) {
+    box.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:190px;color:var(--text-muted)">No data</div>';
+    return;
+  }
+  var W = box.clientWidth || 600, H = 190, pL = 40, pR = 15, pT = 15, pB = 25;
+  var cW = W - pL - pR, cH = H - pT - pB;
+
+  var maxVal = 0;
+  data.forEach(function(d) {
+    series.forEach(function(s) {
+      if ((d[s.key] || 0) > maxVal) maxVal = d[s.key] || 0;
+    });
+  });
+  if (maxVal === 0) maxVal = 1;
+
+  var svg = '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '">';
+  for (var i = 0; i <= 3; i++) {
+    var y = pT + cH * (i / 3);
+    var v = maxVal * (1 - i / 3);
+    svg += '<line x1="' + pL + '" y1="' + y + '" x2="' + (W - pR) + '" y2="' + y + '" stroke="var(--border)" stroke-dasharray="2,2"/>';
+    svg += '<text x="' + (pL - 6) + '" y="' + (y + 3) + '" fill="var(--text-muted)" font-size="9" text-anchor="end" font-family="var(--mono)">' + (maxVal < 10 ? v.toFixed(1)+'s' : nTok(Math.round(v))) + '</text>';
+  }
+
+  series.forEach(function(s) {
+    var points = [];
+    data.forEach(function(d, idx) {
+      var x = pL + cW * (idx / (data.length - 1 || 1));
+      var y = pT + cH * (1 - (d[s.key] || 0) / maxVal);
+      points.push({ x: x, y: y, val: d[s.key] || 0, label: d.hour });
+    });
+
+    var dPath = "M " + points[0].x + " " + points[0].y;
+    for (var i = 1; i < points.length; i++) dPath += " L " + points[i].x + " " + points[i].y;
+    var areaPath = dPath + " L " + points[points.length - 1].x + " " + (pT + cH) + " L " + points[0].x + " " + (pT + cH) + " Z";
+
+    svg += '<path d="' + areaPath + '" fill="' + s.color + '" fill-opacity="0.1"/>';
+    svg += '<path d="' + dPath + '" fill="none" stroke="' + s.color + '" stroke-width="2"/>';
+
+    points.forEach(function(p) {
+      svg += '<circle cx="' + p.x + '" cy="' + p.y + '" r="2.5" fill="' + s.color + '" onmouseenter="showTooltip(event, \'' + esc(p.label) + ': ' + (p.val < 10 ? p.val.toFixed(2)+'s' : n(p.val)) + ' (' + s.label + ')\')" onmouseleave="hideTooltip()"/>';
+    });
+  });
+
+  var step = Math.max(1, Math.floor(data.length / 5));
+  for (var i = 0; i < data.length; i += step) {
+    var x = pL + cW * (i / (data.length - 1 || 1));
+    var lbl = data[i].hour.slice(5, 13);
+    svg += '<text x="' + x + '" y="' + (H - 6) + '" fill="var(--text-muted)" font-size="9" text-anchor="middle" font-family="var(--mono)">' + esc(lbl) + '</text>';
+  }
+
+  svg += '</svg>';
+  box.innerHTML = svg;
+}
+
+function renderHorizontalBar(containerId, items, color, drillField) {
+  var box = document.getElementById(containerId);
+  if (!box) return;
+  if (!items || !items.length) {
+    box.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:190px;color:var(--text-muted)">No data</div>';
+    return;
+  }
+  var max = items[0].calls || 1;
+  var html = '<div style="display:flex;flex-direction:column;gap:7px;padding:4px 0">';
+  items.slice(0, 8).forEach(function(it) {
+    var pct = ((it.calls / max) * 100).toFixed(1);
+    var clickAttr = drillField ? 'onclick="drillDown(\'' + drillField + '\',\'' + esc(it.val || it.name) + '\')"' : '';
+    html += '<div>' +
+      '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px">' +
+        '<span class="' + (drillField ? 'clickable-item' : '') + '" ' + clickAttr + ' style="font-weight:600">' + esc(it.name) + '</span>' +
+        '<span style="color:var(--text-muted);font-family:var(--mono)">' + n(it.calls) + '</span>' +
+      '</div>' +
+      '<div style="height:5px;background:var(--bg-subtle);border-radius:99px;overflow:hidden">' +
+        '<div style="width:' + pct + '%;height:100%;background:' + color + ';border-radius:99px"></div>' +
+      '</div></div>';
+  });
+  html += '</div>';
+  box.innerHTML = html;
+}
+
+function renderHistogram(containerId, buckets, color) {
+  var box = document.getElementById(containerId);
+  if (!box || !buckets || !buckets.length) return;
+  var max = 0;
+  buckets.forEach(function(b) { if (b.calls > max) max = b.calls; });
+  if (!max) max = 1;
+
+  var html = '<div style="display:flex;flex-direction:column;gap:6px;padding:4px 0">';
+  buckets.forEach(function(b) {
+    var pct = ((b.calls / max) * 100).toFixed(1);
+    html += '<div>' +
+      '<div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:2px">' +
+        '<span style="font-family:var(--mono);color:var(--text)">' + esc(b.label) + '</span>' +
+        '<span style="color:var(--text-muted);font-family:var(--mono)">' + n(b.calls) + '</span>' +
+      '</div>' +
+      '<div style="height:5px;background:var(--bg-subtle);border-radius:99px;overflow:hidden">' +
+        '<div style="width:' + pct + '%;height:100%;background:' + color + ';border-radius:99px"></div>' +
+      '</div></div>';
+  });
+  html += '</div>';
+  box.innerHTML = html;
+}
+
+function renderScatterPlot(containerId, points) {
+  var box = document.getElementById(containerId);
+  if (!box) return;
+  if (!points || !points.length) {
+    box.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:190px;color:var(--text-muted)">No points</div>';
+    return;
+  }
+  var W = box.clientWidth || 450, H = 190, pL = 40, pR = 15, pT = 15, pB = 25;
+  var cW = W - pL - pR, cH = H - pT - pB;
+
+  var maxLat = 0, maxTTFT = 0;
+  points.forEach(function(p) {
+    if (p.latency_s > maxLat && p.latency_s < 300) maxLat = p.latency_s;
+    if (p.ttft_s > maxTTFT && p.ttft_s < 300) maxTTFT = p.ttft_s;
+  });
+  if (!maxLat) maxLat = 30;
+  if (!maxTTFT) maxTTFT = 20;
+
+  var svg = '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '">';
+  svg += '<line x1="' + pL + '" y1="' + pT + '" x2="' + pL + '" y2="' + (pT + cH) + '" stroke="var(--border)"/>';
+  svg += '<line x1="' + pL + '" y1="' + (pT + cH) + '" x2="' + (W - pR) + '" y2="' + (pT + cH) + '" stroke="var(--border)"/>';
+
+  points.forEach(function(p) {
+    var x = pL + cW * Math.min(1, p.latency_s / maxLat);
+    var y = pT + cH * (1 - Math.min(1, p.ttft_s / maxTTFT));
+    var color = p.failed ? "var(--bad)" : "var(--accent)";
+    svg += '<circle cx="' + x + '" cy="' + y + '" r="3" fill="' + color + '" fill-opacity="0.6" onmouseenter="showTooltip(event, \'' + esc(p.model) + ' | Lat: ' + p.latency_s + 's, TTFT: ' + p.ttft_s + 's\')" onmouseleave="hideTooltip()"/>';
+  });
+
+  svg += '<text x="' + (W - pR) + '" y="' + (H - 6) + '" fill="var(--text-muted)" font-size="9" text-anchor="end">Latency →</text>';
+  svg += '<text x="' + (pL + 4) + '" y="' + (pT + 8) + '" fill="var(--text-muted)" font-size="9">↑ TTFT</text>';
+  svg += '</svg>';
+  box.innerHTML = svg;
+}
+
+function showTooltip(evt, text) {
+  var tt = document.getElementById("tooltip");
+  tt.textContent = text;
+  tt.style.display = "block";
+  tt.style.left = (evt.pageX + 10) + "px";
+  tt.style.top = (evt.pageY - 25) + "px";
+}
+
+function hideTooltip() {
+  document.getElementById("tooltip").style.display = "none";
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+  var savedTheme = localStorage.getItem("cpa_theme");
+  if (savedTheme) document.documentElement.setAttribute("data-theme", savedTheme);
+  refreshData();
+});
+</script>
+</body>
+</html>

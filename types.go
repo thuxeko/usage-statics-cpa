@@ -42,6 +42,7 @@ type Record struct {
 // storage-only grouping fields (api_key/model live in the map keys).
 type RequestDetail struct {
 	ID                string     `json:"id"`
+	Sequence          int64      `json:"sequence,omitempty"`
 	Timestamp         time.Time  `json:"timestamp"`
 	Provider          string     `json:"provider,omitempty"`
 	Model             string     `json:"model,omitempty"`
@@ -81,32 +82,40 @@ type DeleteResult struct {
 
 // SummaryTotals is the overall aggregate for one time range.
 type SummaryTotals struct {
-	Calls           int64   `json:"calls"`
-	Failed          int64   `json:"failed"`
-	InputTokens     int64   `json:"input_tokens"`
-	OutputTokens    int64   `json:"output_tokens"`
-	ReasoningTokens int64   `json:"reasoning_tokens"`
-	CachedTokens    int64   `json:"cached_tokens"`
-	TotalTokens     int64   `json:"total_tokens"`
-	AvgLatencyMs    float64 `json:"avg_latency_ms"`
-	AvgTTFTMs       float64 `json:"avg_ttft_ms"`
-	P50LatencyS     float64 `json:"p50_latency_s"`
-	P90LatencyS     float64 `json:"p90_latency_s"`
-	P50TTFTS        float64 `json:"p50_ttft_s"`
-	P90TTFTS        float64 `json:"p90_ttft_s"`
-	HungCalls       int64   `json:"hung_calls"`       // > 300s
-	CacheHitCalls   int64   `json:"cache_hit_calls"` // cached_tokens > 0
-	ActiveKeys      int64   `json:"active_keys"`
-	ActiveModels    int64   `json:"active_models"`
+	Calls               int64   `json:"calls"`
+	Success             int64   `json:"success"`
+	Failed              int64   `json:"failed"`
+	ErrorRate           float64 `json:"error_rate"`
+	InputTokens         int64   `json:"input_tokens"`
+	OutputTokens        int64   `json:"output_tokens"`
+	ReasoningTokens     int64   `json:"reasoning_tokens"`
+	CachedTokens        int64   `json:"cached_tokens"`
+	CacheCreationTokens int64   `json:"cache_creation_tokens"`
+	TotalTokens         int64   `json:"total_tokens"`
+	AvgLatencyMs        float64 `json:"avg_latency_ms"`
+	AvgTTFTMs           float64 `json:"avg_ttft_ms"`
+	P50LatencyS         float64 `json:"p50_latency_s"`
+	P75LatencyS         float64 `json:"p75_latency_s"`
+	P90LatencyS         float64 `json:"p90_latency_s"`
+	P95LatencyS         float64 `json:"p95_latency_s"`
+	P99LatencyS         float64 `json:"p99_latency_s"`
+	MaxLatencyS         float64 `json:"max_latency_s"`
+	P50TTFTS            float64 `json:"p50_ttft_s"`
+	P90TTFTS            float64 `json:"p90_ttft_s"`
+	HungCalls           int64   `json:"hung_calls"` // > 300s
+	CacheHitCalls       int64   `json:"cache_hit_calls"`
+	ActiveKeys          int64   `json:"active_keys"`
+	ActiveModels        int64   `json:"active_models"`
 }
 
-// GroupStat is one aggregated row for a named dimension (model, alias,
-// provider, attribution, reasoning_effort, executor, or masked api key).
+// GroupStat is one aggregated row for a named dimension.
 type GroupStat struct {
 	Name            string  `json:"name"`
 	Sub             string  `json:"sub,omitempty"`
 	Calls           int64   `json:"calls"`
+	Success         int64   `json:"success"`
 	Failed          int64   `json:"failed"`
+	ErrorRate       float64 `json:"error_rate"`
 	InputTokens     int64   `json:"input_tokens"`
 	OutputTokens    int64   `json:"output_tokens"`
 	ReasoningTokens int64   `json:"reasoning_tokens,omitempty"`
@@ -116,23 +125,32 @@ type GroupStat struct {
 	AvgLatencyMs    float64 `json:"avg_latency_ms"`
 	AvgTTFTMs       float64 `json:"avg_ttft_ms"`
 	P50LatencyS     float64 `json:"p50_latency_s,omitempty"`
+	P75LatencyS     float64 `json:"p75_latency_s,omitempty"`
 	P90LatencyS     float64 `json:"p90_latency_s,omitempty"`
+	P95LatencyS     float64 `json:"p95_latency_s,omitempty"`
+	P99LatencyS     float64 `json:"p99_latency_s,omitempty"`
 	P50TTFTS        float64 `json:"p50_ttft_s,omitempty"`
 	P90TTFTS        float64 `json:"p90_ttft_s,omitempty"`
 	TopError        int     `json:"top_error,omitempty"`
 }
 
-// HourStat is one hourly bucket of the trend chart with multi-dimension counts.
+// HourStat is one bucket of the trend chart with multi-dimension counts.
 type HourStat struct {
-	Hour         string `json:"hour"`
-	Calls        int64  `json:"calls"`
-	Failed       int64  `json:"failed"`
-	TotalTokens  int64  `json:"total_tokens"`
-	InputTokens  int64  `json:"input_tokens,omitempty"`
-	OutputTokens int64  `json:"output_tokens,omitempty"`
-	RoutedCalls  int64  `json:"routed_calls,omitempty"`
-	DirectCalls  int64  `json:"direct_calls,omitempty"`
-	HighEffort   int64  `json:"high_effort_calls,omitempty"`
+	Hour         string  `json:"hour"`
+	Calls        int64   `json:"calls"`
+	Success      int64   `json:"success"`
+	Failed       int64   `json:"failed"`
+	ErrorRate    float64 `json:"error_rate"`
+	TotalTokens  int64   `json:"total_tokens"`
+	InputTokens  int64   `json:"input_tokens,omitempty"`
+	OutputTokens int64   `json:"output_tokens,omitempty"`
+	RoutedCalls  int64   `json:"routed_calls,omitempty"`
+	DirectCalls  int64   `json:"direct_calls,omitempty"`
+	HighEffort   int64   `json:"high_effort_calls,omitempty"`
+	P50LatencyS  float64 `json:"p50_latency_s,omitempty"`
+	P90LatencyS  float64 `json:"p90_latency_s,omitempty"`
+	P95LatencyS  float64 `json:"p95_latency_s,omitempty"`
+	P99LatencyS  float64 `json:"p99_latency_s,omitempty"`
 }
 
 // StatusCodeStat counts failed calls per upstream status code.
@@ -148,30 +166,43 @@ type RouterMapping struct {
 	Calls int64  `json:"calls"`
 }
 
-// ContextBucket is one histogram bucket for prompt context token sizes.
-type ContextBucket struct {
+// DistributionBucket represents a histogram bin for latency or tokens.
+type DistributionBucket struct {
 	Label string `json:"label"`
 	Calls int64  `json:"calls"`
 }
 
+// ScatterPoint is one point for the Latency vs TTFT scatter plot.
+type ScatterPoint struct {
+	LatencyS float64 `json:"latency_s"`
+	TTFTS    float64 `json:"ttft_s"`
+	Model    string  `json:"model"`
+	Provider string  `json:"provider"`
+	Failed   bool    `json:"failed"`
+}
+
 // UsageSummary is the complete dashboard aggregate for a time range.
 type UsageSummary struct {
-	Start            *time.Time       `json:"start,omitempty"`
-	End              *time.Time       `json:"end,omitempty"`
-	Source           string           `json:"source,omitempty"`
-	Totals           SummaryTotals    `json:"totals"`
-	ByHour           []HourStat       `json:"by_hour"`
-	ByModel          []GroupStat      `json:"by_model"`
-	ByAlias          []GroupStat      `json:"by_alias"`
-	ByProvider       []GroupStat      `json:"by_provider"`
-	ByAPIKey         []GroupStat      `json:"by_api_key"`
-	ByAttribution    []GroupStat      `json:"by_attribution"`
-	ByEffort         []GroupStat      `json:"by_effort"`
-	ByExecutor       []GroupStat      `json:"by_executor"`
-	ByPrefix         []GroupStat      `json:"by_prefix"`
-	StatusCodes      []StatusCodeStat `json:"status_codes"`
-	RouterMappings   []RouterMapping  `json:"router_mappings"`
-	ContextHistogram []ContextBucket  `json:"context_histogram"`
+	Start               *time.Time           `json:"start,omitempty"`
+	End                 *time.Time           `json:"end,omitempty"`
+	Source              string               `json:"source,omitempty"`
+	Totals              SummaryTotals        `json:"totals"`
+	ByHour              []HourStat           `json:"by_hour"`
+	ByModel             []GroupStat          `json:"by_model"`
+	ByAlias             []GroupStat          `json:"by_alias"`
+	ByProvider          []GroupStat          `json:"by_provider"`
+	ByAPIKey            []GroupStat          `json:"by_api_key"`
+	ByAttribution       []GroupStat          `json:"by_attribution"`
+	ByEffort            []GroupStat          `json:"by_effort"`
+	ByExecutor          []GroupStat          `json:"by_executor"`
+	ByPrefix            []GroupStat          `json:"by_prefix"`
+	StatusCodes         []StatusCodeStat     `json:"status_codes"`
+	RouterMappings      []RouterMapping      `json:"router_mappings"`
+	LatencyDistribution []DistributionBucket `json:"latency_distribution"`
+	TokenDistribution   []DistributionBucket `json:"token_distribution"`
+	ContextHistogram    []DistributionBucket `json:"context_histogram"` // backward compat
+	ScatterPoints       []ScatterPoint       `json:"scatter_points"`
+	SlowestRequests     []RequestDetail      `json:"slowest_requests"`
 }
 
 // PageFilter narrows the paginated request listing.
@@ -183,6 +214,7 @@ type PageFilter struct {
 	Attribution     string
 	ReasoningEffort string
 	Executor        string
+	ServiceTier     string
 	Failed          *bool
 	StatusCode      int
 	CachedOnly      bool

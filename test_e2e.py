@@ -146,9 +146,17 @@ def main():
     code, body = mgmt("GET", "/v0/resource/plugins/usage-statistics/dashboard", {})
     assert code == 200, code
     html = body.decode()
-    assert "Usage Statistics" in html and "usage/summary" in html, "dashboard html unexpected"
+    assert ("Usage Statistics" in html or "Analytics Dashboard" in html) and "usage/summary" in html, "dashboard html unexpected"
     assert len(html) > 5000, len(html)
     print("PASS dashboard: HTML page served, %d bytes, title + API calls present" % len(html))
+
+    # 6b. dashboard2 resource page (v2 clean, icon-free)
+    code, body2 = mgmt("GET", "/v0/resource/plugins/usage-statistics/dashboard2", {})
+    assert code == 200, code
+    html2 = body2.decode()
+    assert "Analytics Dashboard" in html2 and "usage/summary" in html2, "dashboard2 html unexpected"
+    assert len(html2) > 5000, len(html2)
+    print("PASS dashboard2: HTML page served, %d bytes, title + API calls present" % len(html2))
 
     # 7. unknown route → 404 (full path form)
     code, _ = mgmt("GET", "/v0/management/plugins/usage-statistics/nope", {})
