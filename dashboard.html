@@ -57,33 +57,36 @@ body {
   font-family: var(--font);
   font-size: 13px;
   line-height: 1.5;
-  padding: 20px;
+  padding: 0 0 60px;
   -webkit-font-smoothing: antialiased;
 }
 
 .container {
   max-width: 960px;
   margin: 0 auto;
+  padding: 0 16px;
 }
 
 .app-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 20px;
-  padding-bottom: 14px;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 12px 0;
   border-bottom: 1px solid var(--border);
 }
 
 .brand-title {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
   letter-spacing: -0.02em;
   color: var(--text);
 }
 
 .brand-sub {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-dim);
   margin-top: 2px;
 }
@@ -148,6 +151,7 @@ body {
 
 .mode-pills {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   margin-bottom: 16px;
 }
@@ -181,6 +185,7 @@ body {
 .form-group {
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 .form-label {
@@ -190,21 +195,38 @@ body {
   margin-bottom: 6px;
 }
 
+/* Hàng label + nút phụ: cho phép xuống dòng khi hẹp */
+.label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
 .form-input, .form-select {
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   color: var(--text);
   font-family: var(--font);
-  font-size: 13px;
-  padding: 8px 12px;
+  font-size: 14px;
+  padding: 9px 12px;
   outline: none;
   transition: border-color 0.15s ease;
   width: 100%;
+  min-height: 38px;
 }
 
 .form-input:focus, .form-select:focus {
   border-color: var(--accent);
+}
+
+/* Select cần chừa chỗ cho mũi tên, nếu không chữ bị chevron đè lên */
+.form-select {
+  padding-right: 34px;
+  text-overflow: ellipsis;
 }
 
 .form-input[readonly] {
@@ -338,6 +360,28 @@ body {
   margin-top: 12px;
   white-space: pre-wrap;
 }
+
+/* ===== Mobile Responsive ===== */
+@media (max-width: 720px) {
+  /* Form về 1 cột, input full width — hết bị cắt cụt nội dung */
+  .form-grid { grid-template-columns: 1fr; gap: 12px; }
+  .form-group[style*="span 2"] { grid-column: span 1 !important; }
+  /* 16px để iOS không tự zoom khi focus vào ô nhập */
+  .form-input, .form-select { font-size: 16px; }
+  .btn-primary { font-size: 14px; padding: 11px 16px; }
+}
+
+@media (max-width: 640px) {
+  /* Né cụm nút nổi của CPAMC trên mobile */
+  body { padding-top: 60px; }
+  .panel { padding: 14px; }
+  .nav-tabs { margin-bottom: 14px; }
+  .brand-sub { font-size: 10px; }
+  .btn-group { gap: 8px; }
+  .btn-group .btn-primary { width: 100%; }
+  .log-box { max-height: 180px; }
+  .data-table th, .data-table td { font-size: 11px; padding: 6px 8px; }
+}
 </style>
 </head>
 <body>
@@ -398,7 +442,7 @@ body {
           <input type="text" id="baseUrl" class="form-input" placeholder="https://api.example.com/v1">
         </div>
         <div class="form-group">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+          <div class="label-row">
             <label class="form-label" style="margin-bottom:0;">API Key của Provider:</label>
             <button type="button" class="btn-secondary" style="padding: 1px 6px; font-size: 11px;" onclick="toggleKeyVisibility()">Hiện/Ẩn Key</button>
           </div>
@@ -411,12 +455,12 @@ body {
     <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);">
       <div class="form-grid">
         <div class="form-group">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+          <div class="label-row">
             <label class="form-label" style="margin-bottom:0;">Model từ Provider:</label>
             <button id="btnFetchModels" type="button" class="btn-secondary" style="padding: 2px 8px; font-size: 11px;" onclick="fetchModelsFromEndpoint()">Tải danh sách Model</button>
           </div>
           <select id="modelSelect" class="form-select">
-            <option value="">-- Bấm "Tải danh sách Model" để xem model --</option>
+            <option value="">-- Bấm nút Tải danh sách Model --</option>
           </select>
           <span id="fetchStatus" style="font-size:11px;color:var(--text-dim);font-family:var(--mono);margin-top:4px;"></span>
         </div>
@@ -632,7 +676,7 @@ function loadCPAProviders() {
       sel.innerHTML = '<option value="">-- Không tìm thấy provider nào trong config.yaml --</option>';
       return;
     }
-    sel.innerHTML = '<option value="">-- Chọn một Provider (' + cpaProvidersList.length + ' providers đang hoạt động) --</option>';
+    sel.innerHTML = '<option value="">-- Chọn Provider (' + cpaProvidersList.length + ' đang hoạt động) --</option>';
     cpaProvidersList.forEach(function(p) {
       var opt = document.createElement("option");
       opt.value = p.name;
