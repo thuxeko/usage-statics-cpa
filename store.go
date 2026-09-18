@@ -98,6 +98,15 @@ func (s *SQLiteStore) initSchema(ctx context.Context) error {
 			prompt_preview TEXT NOT NULL DEFAULT '',
 			response_preview TEXT NOT NULL DEFAULT ''
 		)`,
+		`CREATE TABLE IF NOT EXISTS price_overrides (
+	model TEXT PRIMARY KEY,
+	input REAL NOT NULL DEFAULT 0 CHECK (input >= 0),
+	output REAL NOT NULL DEFAULT 0 CHECK (output >= 0),
+	cache_read REAL NOT NULL DEFAULT 0 CHECK (cache_read >= 0),
+	cache_creation REAL NOT NULL DEFAULT 0 CHECK (cache_creation >= 0),
+	accounting_mode TEXT NOT NULL DEFAULT '',
+	updated_at TEXT NOT NULL DEFAULT ''
+)`,
 		`CREATE INDEX IF NOT EXISTS idx_chat_previews_req ON chat_previews(request_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_chat_previews_ts ON chat_previews(timestamp)`,
 	}

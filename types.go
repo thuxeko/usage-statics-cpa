@@ -106,6 +106,14 @@ type SummaryTotals struct {
 	CacheHitCalls       int64   `json:"cache_hit_calls"`
 	ActiveKeys          int64   `json:"active_keys"`
 	ActiveModels        int64   `json:"active_models"`
+
+	// Estimated cost. Priced calls are those whose model resolved to a price in
+	// the router price book; unpriced calls have no known price and are NEVER
+	// counted as free.
+	CostUSD           float64 `json:"cost_usd"`
+	CostPricedCalls   int64   `json:"cost_priced_calls"`
+	CostUnpricedCalls int64   `json:"cost_unpriced_calls"`
+	CostPartial       bool    `json:"cost_partial"`
 }
 
 // GroupStat is one aggregated row for a named dimension.
@@ -132,6 +140,31 @@ type GroupStat struct {
 	P50TTFTS        float64 `json:"p50_ttft_s,omitempty"`
 	P90TTFTS        float64 `json:"p90_ttft_s,omitempty"`
 	TopError        int     `json:"top_error,omitempty"`
+
+	// Estimated cost for this group (models only). CostUSD covers PricedCalls;
+	// UnpricedCalls had no price and are excluded from the sum.
+	CostUSD       float64 `json:"cost_usd,omitempty"`
+	PricedCalls   int64   `json:"priced_calls,omitempty"`
+	UnpricedCalls int64   `json:"unpriced_calls,omitempty"`
+	PriceSource   string  `json:"price_source,omitempty"`
+}
+
+// UnpricedModel reports a model seen in the period that has no price in the
+// price book, so the dashboard can list it instead of silently showing $0.
+type UnpricedModel struct {
+	Model string `json:"model"`
+	Calls int64  `json:"calls"`
+}
+
+// PricingMeta describes the price book the estimates were computed from.
+type PricingMeta struct {
+	Available   bool            `json:"available"`
+	Source      string          `json:"source,omitempty"`
+	Revision    uint64          `json:"revision"`
+	Entries     int             `json:"entries"`
+	SyncedAt    string          `json:"synced_at,omitempty"`
+	Unpriced    []UnpricedModel `json:"unpriced_models,omitempty"`
+	Note        string          `json:"note,omitempty"`
 }
 
 // HourStat is one bucket of the trend chart with multi-dimension counts.
@@ -203,6 +236,7 @@ type UsageSummary struct {
 	ContextHistogram    []DistributionBucket `json:"context_histogram"` // backward compat
 	ScatterPoints       []ScatterPoint       `json:"scatter_points"`
 	SlowestRequests     []RequestDetail      `json:"slowest_requests"`
+	Pricing             PricingMeta          `json:"pricing"`
 }
 
 // PageFilter narrows the paginated request listing.

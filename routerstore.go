@@ -42,6 +42,8 @@ type routerRecord struct {
 	MaskedAPIKey        string `json:"masked_api_key"`
 	Failed              bool   `json:"failed"`
 	StatusCode          int    `json:"status_code"`
+	AccountingMode      string `json:"accounting_mode"`
+	ReasoningMode       string `json:"reasoning_mode"`
 	LatencyNS           int64  `json:"latency_ns"`
 	TTFTNS              int64  `json:"ttft_ns"`
 	InputTokens         int64  `json:"input_tokens"`
@@ -51,6 +53,67 @@ type routerRecord struct {
 	CacheReadTokens     int64  `json:"cache_read_tokens"`
 	CacheCreationTokens int64  `json:"cache_creation_tokens"`
 	TotalTokens         int64  `json:"total_tokens"`
+}
+
+// scanRouterModelIndex walks the whole history ONCE and returns, per lowercased
+// model name, the lifetime call count and the timestamp of the last run.
+//
+// The price catalogue needs this because a price belongs to a model, not to
+// whether it happened to run in the selected window: without a lifetime view a
+// model last used days ago simply cannot be priced. The aggregation happens in
+// SQLite so the payloads never reach Go.
+func (r *routerStore) scanRouterModelIndex(ctx context.Context) (*modelIndex, error) {
+	idx := &modelIndex{
+		counts:   map[string]int64{},
+		lastSeen: map[string]string{},
+		display:  map[string]string{},
+	}
+	db, err := r.connect()
+	if err != nil {
+		return idx, err
+	}
+	// json_extract reads the model straight out of the payload; a malformed or
+	// empty value is skipped rather than aborting the scan. GROUP BY 1 keeps the
+	// aggregation inside SQLite so payloads never reach Go.
+	//
+	// The display name is taken separately from the lowercased group key so the
+	// catalogue can show the model's real spelling.
+	query := `SELECT lower(coalesce(json_extract(payload, '$.provider_model'), '')) AS k,
+	                 max(coalesce(json_extract(payload, '$.provider_model'), '')) AS display,
+	                 count(*),
+	                 max(coalesce(json_extract(payload, '$.requested_at'), ''))
+	          FROM requests
+	          GROUP BY k`
+	rows, err := db.QueryContext(ctx, query)
+	if err != nil {
+		return idx, fmt.Errorf("router db model index: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var key, display, last string
+		var count int64
+		if err := rows.Scan(&key, &display, &count, &last); err != nil {
+			return idx, fmt.Errorf("router db model index scan: %w", err)
+		}
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		idx.counts[key] = count
+		idx.display[key] = strings.TrimSpace(display)
+		if last != "" {
+			idx.lastSeen[key] = last
+		}
+	}
+	return idx, rows.Err()
+}
+
+// modelIndex is the lifetime view of every model ever recorded, keyed by
+// lowercased name.
+type modelIndex struct {
+	counts   map[string]int64
+	lastSeen map[string]string
+	display  map[string]string // lowercased -> the model's real spelling
 }
 
 // routerStore is a lazy read-only handle to the model-router database.
@@ -341,6 +404,13 @@ func (r *routerStore) RouterSummary(ctx context.Context, rng QueryRange, filter 
 	var totals enhancedGroupAcc
 	var scatterPoints []ScatterPoint
 
+	// Price book (router book + manual overrides) is read once per summary;
+	// failures degrade to an empty book so the dashboard shows "chua co gia"
+	// instead of breaking.
+	book := r.loadEffectivePriceBook(ctx)
+	var unpricedByModel = map[string]int64{}
+	var unpricedOrder []string
+
 	err := r.scanRouterRows(ctx, rng.Start, rng.End, func(rec routerRecord) error {
 		if !matchRouterRecord(rec, activeFilter) {
 			return nil
@@ -359,7 +429,19 @@ func (r *routerStore) RouterSummary(ctx context.Context, rng QueryRange, filter 
 		totals.add(rec.Failed, latMs, ttftMs, latS, ttftS, rec.InputTokens, rec.OutputTokens, rec.ReasoningTokens, cached, rec.TotalTokens, rec.StatusCode)
 
 		modelName := firstNonEmpty(rec.ProviderModel, "unknown")
-		enhancedAccFor(models, modelName).add(rec.Failed, latMs, ttftMs, latS, ttftS, rec.InputTokens, rec.OutputTokens, rec.ReasoningTokens, cached, rec.TotalTokens, rec.StatusCode)
+		modelAcc := enhancedAccFor(models, modelName)
+		modelAcc.add(rec.Failed, latMs, ttftMs, latS, ttftS, rec.InputTokens, rec.OutputTokens, rec.ReasoningTokens, cached, rec.TotalTokens, rec.StatusCode)
+
+		// Estimated cost. Unpriced models are counted, never treated as free.
+		cost, priceSource, priced := estimateRecordCost(rec, book)
+		modelAcc.addCost(cost, priced, priceSource)
+		totals.addCost(cost, priced, "")
+		if !priced {
+			if _, seen := unpricedByModel[modelName]; !seen {
+				unpricedOrder = append(unpricedOrder, modelName)
+			}
+			unpricedByModel[modelName]++
+		}
 
 		aliasName := firstNonEmpty(rec.RouterModel, "Direct / No Router")
 		enhancedAccFor(aliases, aliasName).add(rec.Failed, latMs, ttftMs, latS, ttftS, rec.InputTokens, rec.OutputTokens, rec.ReasoningTokens, cached, rec.TotalTokens, rec.StatusCode)
@@ -529,7 +611,30 @@ func (r *routerStore) RouterSummary(ctx context.Context, rng QueryRange, filter 
 		CacheHitCalls:       totals.cacheHitCalls,
 		ActiveKeys:          int64(len(keys)),
 		ActiveModels:        int64(len(models)),
+
+		CostUSD:           round4(totals.costUSD),
+		CostPricedCalls:   totals.pricedCalls,
+		CostUnpricedCalls: totals.unpricedCalls,
+		CostPartial:       totals.unpricedCalls > 0,
 	}
+
+	summary.Pricing = PricingMeta{
+		Available: book.Count > 0,
+		Source:    book.SyncedBy,
+		Revision:  book.Revision,
+		Entries:   book.Count,
+		SyncedAt:  book.SyncedAt,
+		Note:      "Chi phi la uoc tinh theo bang gia cua model-router; model thieu gia khong duoc tinh la mien phi.",
+	}
+	for _, name := range unpricedOrder {
+		summary.Pricing.Unpriced = append(summary.Pricing.Unpriced, UnpricedModel{Model: name, Calls: unpricedByModel[name]})
+	}
+	sort.Slice(summary.Pricing.Unpriced, func(i, j int) bool {
+		if summary.Pricing.Unpriced[i].Calls == summary.Pricing.Unpriced[j].Calls {
+			return summary.Pricing.Unpriced[i].Model < summary.Pricing.Unpriced[j].Model
+		}
+		return summary.Pricing.Unpriced[i].Calls > summary.Pricing.Unpriced[j].Calls
+	})
 
 	summary.ByModel = enhancedToStats(models, nil)
 	summary.ByAlias = enhancedToStats(aliases, aliasSubs)
@@ -692,6 +797,10 @@ func parseRouterTimestampOrZero(raw string) time.Time {
 type enhancedGroupAcc struct {
 	calls         int64
 	failed        int64
+	costUSD       float64
+	pricedCalls   int64
+	unpricedCalls int64
+	priceSource   string
 	inTok         int64
 	outTok        int64
 	reasoningTok  int64
@@ -732,6 +841,21 @@ func (g *enhancedGroupAcc) add(failed bool, latMs, ttftMs int64, latS, ttftS flo
 		g.cacheHitCalls++
 	}
 	g.totalTok += totalTok
+}
+
+// addCost accumulates the estimated cost of one record. priced=false means the
+// model had no known price: the call is counted as unpriced and adds nothing,
+// so an unpriced model can never masquerade as free.
+func (g *enhancedGroupAcc) addCost(cost float64, priced bool, source string) {
+	if !priced {
+		g.unpricedCalls++
+		return
+	}
+	g.pricedCalls++
+	g.costUSD += cost
+	if g.priceSource == "" {
+		g.priceSource = source
+	}
 }
 
 func enhancedAccFor(m map[string]*enhancedGroupAcc, key string) *enhancedGroupAcc {
@@ -804,6 +928,10 @@ func enhancedToStats(m map[string]*enhancedGroupAcc, subMaps map[string]map[stri
 			P50TTFTS:        round2(p50TTFT),
 			P90TTFTS:        round2(p90TTFT),
 			TopError:        topErr,
+			CostUSD:         g.costUSD,
+			PricedCalls:     g.pricedCalls,
+			UnpricedCalls:   g.unpricedCalls,
+			PriceSource:     g.priceSource,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool {

@@ -41,6 +41,12 @@ const (
 	managementProvidersPath = "/plugins/" + pluginID + "/providers"
 	// managementProxyFetchPath allows proxying fetch and probe calls to upstreams from backend.
 	managementProxyFetchPath = "/plugins/" + pluginID + "/proxy-fetch"
+	// managementPricingPath reads/writes the estimated-cost price book view:
+	// the router's price book plus the manual overrides stored in usage.db.
+	managementPricingPath = "/plugins/" + pluginID + "/pricing"
+	// managementPricingSyncPath returns models.dev price candidates for the
+	// models seen in the range; the user picks one, nothing is auto-applied.
+	managementPricingSyncPath = "/plugins/" + pluginID + "/pricing/sync"
 	// dashboardPath is the FULL public resource URL the browser requests. CPA
 	// mounts Resource routes at /v0/resource/plugins/<id>/<registered Path>
 	// and dispatches the request to the plugin's management.handle with this
@@ -248,6 +254,9 @@ func managementRegistration() managementRegistrationPayload {
 			{Method: "GET", Path: managementPayloadPath, Description: "Captured chat prompt/response preview for requests."},
 			{Method: "GET", Path: managementProvidersPath, Description: "Known providers and models discovery for testing tools."},
 			{Method: "POST", Path: managementProxyFetchPath, Description: "Internal HTTP proxy for upstream models fetch and reasoning probes."},
+			{Method: "GET", Path: managementPricingPath, Description: "Read the price book applied to estimated costs, with per-model status."},
+			{Method: "PUT", Path: managementPricingPath, Description: "Save manual price overrides for estimated costs."},
+			{Method: "GET", Path: managementPricingSyncPath, Description: "List models.dev price candidates for the models in range."},
 			{Method: "DELETE", Path: managementUsagePath, Description: "Delete persisted usage records by id."},
 		},
 		Resources: []resourceRouteInfo{
@@ -456,6 +465,20 @@ func handleManagement(request []byte) ([]byte, error) {
 			return okEnvelope(jsonManagementResponse(405, map[string]string{"error": "method not allowed"}))
 		}
 		return proxyFetchHandler(req)
+	case path == strings.TrimRight(managementPricingSyncPath, "/"):
+		if !strings.EqualFold(strings.TrimSpace(req.Method), "GET") {
+			return okEnvelope(jsonManagementResponse(405, map[string]string{"error": "method not allowed"}))
+		}
+		return pricingSyncGet(req)
+	case path == strings.TrimRight(managementPricingPath, "/"):
+		switch strings.ToUpper(strings.TrimSpace(req.Method)) {
+		case "GET":
+			return pricingGet(req)
+		case "PUT":
+			return pricingPut(req)
+		default:
+			return okEnvelope(jsonManagementResponse(405, map[string]string{"error": "method not allowed"}))
+		}
 	default:
 		return okEnvelope(jsonManagementResponse(404, map[string]string{"error": "not found"}))
 	}
