@@ -9,16 +9,21 @@
    Minimalist Slate Theme (Clean, High-Density, Icon-Free, Vietnamese)
    ========================================================================== */
 :root {
-  --bg: #090d16;
-  --bg-card: #111726;
-  --bg-card-hover: #172033;
-  --bg-subtle: #161e30;
-  --bg-glass: rgba(17, 23, 38, 0.92);
-  --border: rgba(255, 255, 255, 0.08);
-  --border-focus: rgba(99, 102, 241, 0.5);
-  --text: #f8fafc;
-  --text-dim: #94a3b8;
-  --text-muted: #64748b;
+  /* Eye-comfort dark palette. The old values (#090d16 bg with #f8fafc text)
+     measured 18.6:1 contrast and made long sessions tiring: a near-black field
+     under near-white text forces the iris to re-adapt on every saccade. These
+     values sit around 13:1 for body text and lift muted text from 4.1:1 to
+     6.5:1 so small labels stay legible. */
+  --bg: #141c28;
+  --bg-card: #1b2534;
+  --bg-card-hover: #22303f;
+  --bg-subtle: #202a3a;
+  --bg-glass: rgba(27, 37, 52, 0.94);
+  --border: rgba(255, 255, 255, 0.10);
+  --border-focus: rgba(129, 140, 248, 0.55);
+  --text: #dde3ec;
+  --text-dim: #b3bdcc;
+  --text-muted: #94a1b2;
   --accent: #6366f1;
   --accent-glow: rgba(99, 102, 241, 0.12);
   --ok: #10b981;
@@ -33,6 +38,11 @@
   --radius-sm: 4px;
   --shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
   --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+  /* Aliases: these two names were referenced but never declared, so every
+     var(--line) border and var(--muted) label silently resolved to the CSS
+     initial value. Map them onto the real tokens. */
+  --line: var(--border);
+  --muted: var(--text-muted);
 }
 [data-theme="light"] {
   --bg: #f8fafc;
@@ -42,9 +52,9 @@
   --bg-glass: rgba(255, 255, 255, 0.94);
   --border: rgba(0, 0, 0, 0.08);
   --border-focus: rgba(99, 102, 241, 0.4);
-  --text: #0f172a;
+  --text: #1e293b;
   --text-dim: #475569;
-  --text-muted: #94a3b8;
+  --text-muted: #64748b;
   --accent: #4f46e5;
   --accent-glow: rgba(79, 70, 229, 0.08);
   --ok: #059669;
@@ -186,6 +196,17 @@ body {
   transition: all 0.15s;
 }
 .btn-text:hover { color: var(--text); border-color: var(--text-muted); }
+.btn-primary {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  color: #fff;
+  padding: 5px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.btn-primary:disabled { opacity:.55; cursor:not-allowed; }
 
 /* Navigation Tabs */
 .nav-tabs {
@@ -480,6 +501,207 @@ svg.chart {
   .filter-row { gap: 4px; }
   .filter-select { min-width: 80px; }
 }
+
+/* Selective CAP overview port — isolated from legacy tabs. */
+.tab-btn[data-tab="performance"] { display:none !important; }
+.overview-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin:12px 0; }
+.overview-toolbar label { display:flex; align-items:center; gap:8px; font-size:12px; }
+.overview-extra-kpis { margin-top:10px; }
+.overview-timing { display:flex; flex-wrap:wrap; gap:10px 24px; margin:16px 0; font-size:12px; color:var(--text-muted); }
+.overview-timing strong { color:var(--text); font-variant-numeric:tabular-nums; }
+.overview-sections { margin-bottom:16px; }
+.overview-sections > *, .overview-share-row { min-width:0; }
+.overview-share-row { margin-bottom:15px; }
+.overview-share-row > div:first-child { display:flex; flex-wrap:wrap; gap:5px 10px; justify-content:space-between; font-size:11px; }
+.overview-share-row span { overflow-wrap:anywhere; }
+.overview-share-row strong { font-weight:500; color:var(--text-muted); }
+.overview-track { height:4px; border-radius:3px; background:var(--bg-subtle); margin-top:6px; overflow:hidden; }
+.overview-track > div { height:100%; background:#64748b; }
+.overview-columns { display:flex; flex-wrap:wrap; gap:10px; padding:10px 0; }
+.overview-sort { border:0; padding:0; background:none; color:inherit; font:inherit; cursor:pointer; }
+.overview-sort:focus-visible { outline:2px solid var(--text-muted); outline-offset:4px; }
+.overview-empty { text-align:center; padding:24px; color:var(--text-muted); font-size:12px; }
+.overview-paging button:disabled { opacity:.4; cursor:default; }
+#summary-error { color:var(--bad); font-size:12px; }
+#ov-model-table td:first-child { max-width:360px; overflow-wrap:anywhere; white-space:normal; }
+@media(max-width:640px){
+  .app-header { flex-wrap:wrap; gap:12px; }
+  .header-actions { max-width:100%; }
+  .overview-toolbar select { font-size:16px; min-height:38px; max-width:100%; }
+  .overview-toolbar { align-items:flex-start; }
+  .overview-extra-kpis .stat-value { overflow-wrap:anywhere; }
+  .panel-header { flex-wrap:wrap; gap:8px; }
+}
+
+
+.overview-compact-kpis .stat-card { min-width:0; }
+.overview-compact-kpis .stat-label { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:6px; }
+.overview-compact-kpis .stat-sub { overflow-wrap:anywhere; line-height:1.6; }
+.overview-compact-kpis .stat-value { overflow-wrap:anywhere; }
+.overview-compact-kpis .filter-select { min-width:0; padding:3px 5px; }
+.ov-card-placeholder,.ov-card-model { font-size:19px; }
+.ov-cost-sync { margin-left:6px; padding:1px 8px; font-size:11px; vertical-align:middle; }
+.ov-noprice { color:var(--muted); font-style:italic; }
+.ov-partial { color:var(--muted); margin-left:2px; }
+#ov-cost { cursor:help; }
+.ov-pricing-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; }
+.ov-pricing-head h3 { font-size:15px; font-weight:700; }
+.ov-pricing-actions { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:10px 0; }
+.ov-pricing-list { display:grid; gap:8px; }
+.ov-price-filters { display:flex; gap:6px; flex-wrap:wrap; margin:10px 0; }
+.ov-price-search { width:100%; margin:4px 0 10px; }
+.ov-price-group { display:flex; align-items:center; gap:8px; margin:16px 0 6px; font-size:11px; font-weight:750; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; }
+.ov-price-group:first-child { margin-top:0; }
+.ov-price-group::after { content:""; flex:1; height:1px; background:var(--line); }
+/* Compact price list. Each model is ONE scannable line; the four rate fields
+   live behind "Sửa" and open one at a time, so the page shows ~14 models
+   instead of 5 and the inputs stop dominating the screen. */
+.ov-price-table { display:grid; gap:0; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+.ov-price-row { border-bottom:1px solid var(--line); background:transparent; }
+.ov-price-row:last-child { border-bottom:0; }
+.ov-price-row.ov-price-open { background:var(--bg-subtle); }
+.ov-price-main { display:grid; grid-template-columns:minmax(0,2.4fr) minmax(0,3.1fr);
+  gap:10px; align-items:center; padding:8px 11px; }
+/* The call count, cost and source tag share one container. Putting them in a
+   single grid AREA instead made them overlap on mobile, because CSS stacks
+   every element assigned to the same area rather than flowing them. */
+.ov-price-meta { display:grid; grid-template-columns:minmax(0,.8fr) minmax(0,1fr) minmax(0,1.3fr);
+  gap:10px; align-items:center; min-width:0; }
+.ov-price-row.ov-price-missing .ov-price-main { box-shadow:inset 3px 0 0 var(--bad); }
+.ov-price-row.ov-price-partial .ov-price-main { box-shadow:inset 3px 0 0 var(--warn); }
+.ov-price-name { font-weight:700; font-size:12px; overflow-wrap:anywhere; }
+.ov-price-cell { font-size:11px; color:var(--text-dim); font-variant-numeric:tabular-nums; text-align:right; }
+.ov-price-tag { font-size:10px; color:var(--muted); }
+.ov-price-tag.ov-tag-manual { color:var(--ok); }
+.ov-price-tag.ov-tag-none { color:var(--bad); }
+/* The source label is the row's toggle: it is clickable, so it must look
+   interactive without adding a second control to the row. */
+.ov-price-toggle { cursor:pointer; border-radius:var(--radius-sm); padding:2px 4px; margin:-2px -4px; }
+.ov-price-toggle:hover { background:var(--bg-card-hover); }
+.ov-price-toggle:focus-visible { outline:2px solid var(--border-focus); outline-offset:1px; }
+.ov-price-toggle .ov-price-tag { text-decoration:underline dotted; text-underline-offset:2px; }
+.ov-price-tag.ov-tag-none { font-weight:700; }
+.ov-price-detail { padding:0 11px 11px; border-top:1px solid var(--line); }
+.ov-price-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin-top:9px; }
+.ov-price-grid label { display:block; font-size:10px; color:var(--muted); font-weight:750; }
+.ov-price-grid input { width:100%; margin-top:4px; }
+/* Header row mirrors .ov-price-main so the columns line up. */
+.ov-price-head { display:grid; grid-template-columns:minmax(0,2.4fr) minmax(0,3.1fr);
+  gap:10px; padding:7px 11px; font-size:10px; font-weight:750; color:var(--muted);
+  text-transform:uppercase; letter-spacing:.04em; background:var(--bg-subtle); border-bottom:1px solid var(--line); }
+/* Mirrors .ov-price-meta so the header columns line up with the data columns. */
+.ov-price-head-meta { display:grid; grid-template-columns:minmax(0,.8fr) minmax(0,1fr) minmax(0,1.3fr); gap:10px; }
+.ov-price-head-meta span:nth-child(1), .ov-price-head-meta span:nth-child(2) { text-align:right; }
+/* The page never styled form controls, so every input/select/search fell back
+   to the UA default: a white box with a grey inset border. On the dark theme
+   that was a row of glaring white slabs. Style them from the theme tokens so
+   both themes agree. */
+input[type="text"], input[type="number"], input[type="search"], input:not([type]), select, textarea {
+  background: var(--bg-subtle);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 5px 8px;
+  font: inherit;
+  outline: none;
+}
+input[type="text"]:focus, input[type="number"]:focus, input[type="search"]:focus,
+input:not([type]):focus, select:focus, textarea:focus {
+  border-color: var(--border-focus);
+}
+input::placeholder, textarea::placeholder { color: var(--text-muted); }
+select option { background: var(--bg-card); color: var(--text); }
+/* Number spinners are noise at this size. */
+input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.ov-price-cands { margin-top:8px; }
+.ov-price-cands select { width:100%; margin-top:4px; }
+.ov-price-hint { font-size:10px; color:var(--muted); margin-top:4px; }
+.ov-pricing-foot { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-top:12px; padding-top:10px; border-top:1px solid var(--line); }
+@media(max-width:640px){
+  .ov-price-head { display:none; }
+  .ov-price-main { grid-template-columns:minmax(0,1fr); gap:3px 8px; padding:9px 11px; align-items:center; }
+  .ov-price-name { grid-column:1; grid-row:1; }
+  .ov-price-meta { grid-column:1; grid-row:2; display:flex; flex-wrap:wrap; gap:3px 10px; }
+  .ov-price-cell { text-align:left; font-size:11px; }
+  .ov-price-tag { font-size:10px; }
+  .ov-price-grid { grid-template-columns:1fr 1fr; }
+  .ov-price-grid input { font-size:16px; }
+  .ov-price-cands select { font-size:16px; }
+}
+.ov-share-controls { display:flex; gap:4px; flex-wrap:wrap; }
+.ov-share-controls button[aria-pressed="true"] { background:var(--bg-subtle); color:var(--text); box-shadow:inset 0 0 0 1px var(--border); }
+.ov-share-controls button:disabled { opacity:.4; cursor:not-allowed; }
+.ov-donut-layout { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.6fr); gap:24px; align-items:center; }
+#ov-share-donut { width:100%; max-width:280px; margin:auto; display:block; }
+.ov-donut-track { fill:none; stroke:var(--bg-subtle); stroke-width:28; }
+.ov-donut-segment { fill:none; stroke-width:28; transition:stroke-width .15s; }
+.ov-donut-segment:hover,.ov-donut-segment:focus { stroke-width:34; outline:none; }
+.ov-donut-main { fill:var(--text); text-anchor:middle; font-size:22px; font-weight:600; }
+.ov-donut-sub { fill:var(--text-muted); text-anchor:middle; font-size:12px; }
+.ov-donut-legend { max-height:310px; overflow:auto; min-width:0; }
+.ov-donut-legend-row { display:grid; grid-template-columns:8px minmax(0,1fr) auto; gap:10px; align-items:center; padding:8px 2px; font-size:12px; }
+.ov-donut-legend-row span { overflow-wrap:anywhere; }
+.ov-donut-swatch { width:8px; height:8px; border-radius:50%; }
+.ov-donut-amount { color:var(--text-muted); font-variant-numeric:tabular-nums; }
+@media(max-width:640px){ .ov-donut-layout { grid-template-columns:minmax(0,1fr); gap:4px; } #ov-share-donut { max-width:230px; } .overview-compact-kpis .filter-select { font-size:16px; } .ov-donut-legend-row { grid-template-columns:8px minmax(0,1fr); } .ov-donut-amount { grid-column:2; } }
+
+
+#ov-model-panel,#ov-errors-panel { min-width:0; }
+#ov-token-trend { min-height:270px; width:100%; }
+#ov-token-trend svg { width:100%; display:block; }
+.ov-trend-controls { display:flex; flex-wrap:wrap; gap:4px; margin-bottom:10px; }
+.ov-trend-controls button { display:inline-flex; align-items:center; gap:6px; }
+.ov-trend-controls button[aria-pressed="false"] { opacity:.45; }
+.ov-trend-controls button:disabled { opacity:.4; cursor:not-allowed; }
+.ov-trend-key { width:8px; height:8px; display:inline-block; border-radius:2px; }
+.ov-trend-input { background:#64748b; }
+.ov-trend-output { background:#0d9488; }
+.ov-trend-hit { fill:transparent; cursor:crosshair; }
+.ov-trend-hit:hover,.ov-trend-hit:focus { fill:var(--text); fill-opacity:.08; outline:none; }
+#ov-trend-detail { min-height:34px; line-height:1.5; overflow-wrap:anywhere; margin-top:8px; }
+
+
+/* Hand-drawn chart kit: shared axes, hover layers and tooltip. */
+.ov-tip { position:absolute; z-index:5; max-width:min(260px,88%); pointer-events:none; display:grid; gap:2px;
+  padding:7px 9px; border:1px solid var(--border); border-radius:6px; background:var(--bg-card); box-shadow:var(--shadow); font-size:11px; }
+.ov-tip[hidden] { display:none; }
+.ov-tip strong { font-weight:600; }
+.ov-tip span { color:var(--text-muted); font-variant-numeric:tabular-nums; }
+#ov-token-trend, #ov-chart-errors { position:relative; }
+.ov-grid { stroke:var(--border); stroke-dasharray:2 3; }
+.ov-axis { fill:var(--text-muted); font-size:10px; font-variant-numeric:tabular-nums; }
+.ov-axis-line { stroke:var(--border); }
+.ov-axis { font-family:var(--font); }
+.ov-trend-col { fill:transparent; }
+.ov-trend-hit:hover ~ .ov-trend-col, .ov-trend-col:hover { fill:var(--text); fill-opacity:.05; }
+.ov-trend-hit { fill:transparent; cursor:crosshair; outline:none; }
+.ov-trend-hit:hover, .ov-trend-hit:focus { fill:var(--text); fill-opacity:.05; }
+.ov-trend-bar { transition:opacity .15s; }
+.ov-trend-hit:hover ~ .ov-trend-bar { opacity:.85; }
+.ov-donut-name { overflow-wrap:anywhere; }
+.ov-donut-legend-row { border-radius:6px; cursor:pointer; transition:background .15s,opacity .15s; padding-left:4px; }
+.ov-donut-legend-row:hover, .ov-donut-legend-row:focus-visible { background:var(--bg-subtle); outline:none; }
+.ov-donut-legend-row.is-dim, .ov-donut-segment.is-dim { opacity:.32; }
+.ov-donut-legend-row.is-active { background:var(--bg-subtle); }
+.ov-donut-segment { outline:none; cursor:pointer; transition:stroke-width .15s,opacity .15s; }
+.ov-donut-focus { font-size:10px; }
+
+#ov-model-panel .table-wrap.is-scrollable { mask-image:linear-gradient(to right,#000 calc(100% - 26px),transparent); }
+#ov-model-panel .table-wrap.is-scrollable.is-scroll-end { mask-image:none; }
+#ov-model-panel .table-wrap { scrollbar-width:thin; }
+#ov-model-panel .table-wrap::-webkit-scrollbar { height:6px; }
+#ov-model-panel .table-wrap::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+#ov-model-panel .table-wrap::-webkit-scrollbar-track { background:transparent; }
+
+.ov-bars { display:flex; flex-direction:column; gap:9px; padding:4px 0; }
+.ov-bar-row { display:grid; grid-template-columns:minmax(52px,auto) minmax(0,1fr) auto; align-items:center; gap:10px; font-size:11px; }
+.ov-bar-label { color:var(--text); font-family:var(--mono); white-space:nowrap; }
+.ov-bar-track { height:6px; border-radius:99px; background:var(--bg-subtle); overflow:hidden; }
+.ov-bar-fill { display:block; height:100%; border-radius:99px; background:#e11d48; }
+.ov-bar-value { color:var(--text-muted); font-variant-numeric:tabular-nums; }
+
 </style>
 </head>
 <body>
@@ -522,72 +744,54 @@ svg.chart {
   </div>
 
   <!-- Navigation Tabs (Clean naming, no View x prefix) -->
+  <div id="summary-error" role="status" aria-live="polite"></div>
   <div class="nav-tabs">
     <button class="tab-btn active" data-tab="overview" onclick="switchTab('overview')">Tổng quan</button>
     <button class="tab-btn" data-tab="requests_models" onclick="switchTab('requests_models')">Lưu lượng & Model</button>
     <button class="tab-btn" data-tab="performance" onclick="switchTab('performance')">Hiệu năng & Độ trễ</button>
     <button class="tab-btn" data-tab="tokens_efficiency" onclick="switchTab('tokens_efficiency')">Token & Cache</button>
     <button class="tab-btn" data-tab="requests_log" onclick="switchTab('requests_log')">Tra cứu Requests</button>
+    <button class="tab-btn" data-tab="model_prices" onclick="switchTab('model_prices')">Giá Model</button>
   </div>
 
   <!-- =========================================================================
        TAB 1: TỔNG QUAN (OVERVIEW)
        ========================================================================= -->
   <div id="tab-overview" class="tab-pane">
-    <div class="kpi-grid">
-      <div class="stat-card">
-        <div class="stat-label">Tổng số Request <span class="info-tip" title="Tổng lượt gọi (câu hỏi/yêu cầu) mà client gửi qua gateway">i</span></div>
-        <div class="stat-value" id="ov-total">–</div>
-        <div class="stat-sub">Tổng lượt gọi đến gateway</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Tỷ lệ Lỗi & Trạng thái <span class="info-tip" title="Tỷ lệ thất bại cùng số lượng request Thành công (200 OK) và Thất bại (4xx, 5xx)">i</span></div>
-        <div class="stat-value" id="ov-error-rate">–</div>
-        <div class="stat-sub">
-          <span style="color:var(--ok)"><span id="ov-success">–</span> thành công</span> · 
-          <span style="color:var(--bad)"><span id="ov-failed">–</span> lỗi</span>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Tổng Input Tokens <span class="info-tip" title="Tổng số lượng từ/token người dùng nạp vào model (gồm câu hỏi + tài liệu đính kèm + lịch sử chat)">i</span></div>
-        <div class="stat-value" id="ov-in-tokens">–</div>
-        <div class="stat-sub">Context prompt nạp vào</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Tổng Output Tokens <span class="info-tip" title="Tổng số lượng từ/token mà model sinh ra để trả lời người dùng">i</span></div>
-        <div class="stat-value" id="ov-out-tokens">–</div>
-        <div class="stat-sub">Tokens model sinh ra</div>
-      </div>
+    <!-- Four CAP-style cards; pricing intentionally deferred. -->
+    <div class="kpi-grid overview-compact-kpis">
+      <article class="stat-card"><div class="stat-label">Tổng token <select id="ov-token-mode" class="filter-select" aria-label="Đơn vị token" onchange="setOverviewTokenMode(this.value)"><option value="auto">Tự động</option><option value="full">Đầy đủ</option><option value="k">k</option><option value="m">m</option><option value="B">B</option></select></div><div class="stat-value" id="ov-tokens">–</div><div class="stat-sub" id="ov-token-detail">Vào · Ra · Cache</div></article>
+      <article class="stat-card"><div class="stat-label">Tổng chi phí ước tính <button type="button" class="btn-text ov-cost-sync" id="ov-cost-sync" onclick="switchTab('model_prices')" title="Xem và chỉnh bảng giá model">Xem bảng giá →</button></div><div class="stat-value" id="ov-cost">–</div><div class="stat-sub" id="ov-cost-detail">Đang tải bảng giá…</div></article>
+      <article class="stat-card"><div class="stat-label">Tổng lượt gọi</div><div class="stat-value" id="ov-total">–</div><div class="stat-sub" id="ov-request-detail">Trong khoảng thời gian đã chọn</div></article>
+      <article class="stat-card"><div class="stat-label">Model dùng nhiều nhất</div><div class="stat-value ov-card-model" id="ov-top-model">–</div><div class="stat-sub" id="ov-top-model-detail">Theo số lượt gọi</div></article>
     </div>
-
-    <div class="section-grid">
-      <div class="col-8 panel">
-        <div class="panel-header">
-          <div>
-            <div class="panel-title">Lưu lượng Request theo thời gian</div>
-            <div class="panel-desc">Số lượng yêu cầu Thành công vs Thất bại (Giờ VN · UTC+7)</div>
-          </div>
-          <div style="display:flex;gap:6px">
-            <span class="badge badge-ok">Thành công</span>
-            <span class="badge badge-bad">Thất bại</span>
-          </div>
+    <div class="section-grid overview-sections">
+      <section class="col-6 panel" id="ov-trend-panel">
+        <div class="panel-header"><div><div class="panel-title">Token usage trend</div><div class="panel-desc">Token đầu vào / đầu ra theo giờ · UTC+7</div></div></div>
+        <div class="ov-trend-controls" role="group" aria-label="Thành phần token">
+          <button class="btn-text" data-trend-series="input_tokens" aria-pressed="true" onclick="toggleOverviewTrend('input_tokens')"><span class="ov-trend-key ov-trend-input"></span>Đầu vào</button>
+          <button class="btn-text" data-trend-series="output_tokens" aria-pressed="true" onclick="toggleOverviewTrend('output_tokens')"><span class="ov-trend-key ov-trend-output"></span>Đầu ra</button>
+          <button class="btn-text" disabled title="Nguồn hiện tại chưa có cache theo giờ">Cache read</button>
+          <button class="btn-text" disabled title="Chưa đủ dữ liệu để tính tỷ lệ cache theo giờ">Cache hit rate</button>
         </div>
-        <div class="chart-box" id="ov-chart-volume"></div>
-      </div>
-
-      <div class="col-4 panel">
-        <div class="panel-header">
-          <div class="panel-title">Phân bố Mã lỗi HTTP</div>
-          <div class="panel-desc">Phân tích theo mã lỗi 429, 503, 502, 400...</div>
-        </div>
-        <div class="chart-box" id="ov-chart-errors"></div>
-      </div>
-
-      <div class="col-12 panel">
+        <div id="ov-token-trend" aria-label="Biểu đồ token theo giờ"></div>
+        <div id="ov-trend-detail" class="panel-desc" role="status" aria-live="polite">Chạm hoặc rê chuột lên cột để xem số liệu.</div>
+      </section>
+  <section class="col-6 panel" id="ov-share-panel"><div class="panel-header overview-toolbar"><div><div class="panel-title">Model usage share</div><div class="panel-desc">Tỷ trọng sử dụng của từng model</div></div><div class="ov-share-controls" role="group" aria-label="Chọn cách tính tỷ trọng"><button class="btn-text" data-share-metric="requests" aria-pressed="true" onclick="setOverviewShareMetric('requests')">Lượt gọi</button><button class="btn-text" data-share-metric="tokens" aria-pressed="false" onclick="setOverviewShareMetric('tokens')">Token</button><button class="btn-text" data-share-metric="cost" aria-pressed="false" onclick="setOverviewShareMetric('cost')">Chi phí</button></div></div><div class="ov-donut-layout"><svg id="ov-share-donut" viewBox="0 0 280 280" role="img" aria-label="Tỷ trọng model"></svg><div id="ov-share-legend" class="ov-donut-legend"></div></div></section>
+    </div>
+    <div class="section-grid overview-sections">
+  <section class="col-12 panel" id="ov-model-panel">
+    <div class="panel-header overview-toolbar"><div><div class="panel-title">Mức sử dụng từng model</div><div class="panel-desc">Bấm tiêu đề cột để sắp xếp · Giữ nguyên tên model hệ thống</div></div><details id="ov-columns"><summary class="btn-text">Chọn cột</summary><div id="ov-column-options" class="overview-columns"></div></details></div>
+    <div class="table-wrap"><table id="ov-model-table" class="clean-table"><thead></thead><tbody></tbody></table></div>
+    <div class="overview-toolbar overview-paging"><label>Số dòng <select id="ov-page-size" class="filter-select" onchange="setOverviewPageSize(this.value)"><option value="10">10</option><option value="25">25</option><option value="50">50</option></select></label><span id="ov-model-page" class="panel-desc" aria-live="polite"></span><div><button id="ov-prev" class="btn-text" onclick="changeOverviewPage(-1)">Trước</button><button id="ov-next" class="btn-text" onclick="changeOverviewPage(1)">Sau</button></div></div>
+  </section>
+    </div>
+    <div class="section-grid overview-sections">
+      <div class="col-6 panel" id="ov-provider-panel">
         <div class="panel-header">
           <div>
             <div class="panel-title">Sức khỏe Nhà cung cấp (Provider Health)</div>
-            <div class="panel-desc">Nhấp vào tên Provider để lọc chi tiết (Drill-down)</div>
+            <div class="panel-desc">Lượt gọi, tỷ lệ lỗi và tốc độ phản hồi theo nhà cung cấp</div>
           </div>
         </div>
         <div class="table-wrap">
@@ -596,8 +800,7 @@ svg.chart {
               <tr>
                 <th>Nhà cung cấp</th>
                 <th class="num">Requests</th>
-                <th class="num">Thành công</th>
-                <th class="num">Thất bại</th>
+                <th class="num" title="Số lượt thành công / số lượt thất bại">TC/TB</th>
                 <th class="num">Tỷ lệ lỗi %</th>
                 <th class="num" title="Độ trễ P50: 50% request xử lý nhanh hơn mức này">P50</th>
                 <th class="num" title="Độ trễ P90: 90% request xử lý nhanh hơn mức này">P90</th>
@@ -606,6 +809,14 @@ svg.chart {
             <tbody></tbody>
           </table>
         </div>
+      </div>
+
+      <div class="col-6 panel" id="ov-errors-panel">
+        <div class="panel-header">
+          <div class="panel-title">Phân bố Mã lỗi HTTP</div>
+          <div class="panel-desc">Số lượt lỗi theo mã HTTP</div>
+        </div>
+        <div class="chart-box" id="ov-chart-errors"></div>
       </div>
     </div>
   </div>
@@ -985,6 +1196,30 @@ svg.chart {
       </div>
     </div>
   </div>
+    <div id="tab-model_prices" class="tab-pane" style="display:none">
+      <div class="panel" id="ov-pricing-panel">
+        <div class="ov-pricing-head">
+          <div>
+            <h3>Bảng giá model</h3>
+            <p id="ov-pricing-meta" class="panel-desc">Đang tải…</p>
+          </div>
+          <div class="ov-pricing-actions">
+            <button class="btn-text" type="button" id="ov-pricing-sync" onclick="loadPricingCandidates()">Sync từ models.dev</button>
+            <span id="ov-pricing-status" class="panel-desc" role="status" aria-live="polite"></span>
+          </div>
+        </div>
+        <input type="search" id="ov-price-search" class="ov-price-search" placeholder="Tìm model…" oninput="pricingState.search=this.value;renderPricingRows()" aria-label="Tìm model">
+        <div class="ov-price-filters" id="ov-price-filters" role="group" aria-label="Lọc theo trạng thái giá"></div>
+        <div id="ov-pricing-list" class="ov-pricing-list"></div>
+        <div class="ov-pricing-foot">
+          <span class="panel-desc">Đơn vị: USD / 1 triệu token · Giá nhập tay luôn ưu tiên hơn giá đồng bộ</span>
+          <div>
+            <button class="btn-text" type="button" onclick="resetPricingEdits()">Hoàn tác thay đổi</button>
+            <button class="btn-primary" type="button" id="ov-pricing-save" onclick="savePricingOverrides()">Lưu giá</button>
+          </div>
+        </div>
+      </div>
+    </div>
 </div>
 
 <!-- Modal / Drawer for Request Detail & Error Cause -->
@@ -1293,6 +1528,370 @@ function api(path) {
     });
 }
 
+// ---- Giá Model tab (estimated cost) ----------------------------------------
+// Reads the price book applied to estimated costs and lets the user set a
+// price by hand. Manual prices always win over the router book and over any
+// models.dev candidate; an unpriced model is shown as such, never as $0.
+//
+// Presentation rule: models WITHOUT a price float to the top, grouped as
+// "chưa có giá" then "một phần chưa có giá". Models already priced stay below,
+// so the ones needing a decision are the ones you see first.
+var pricingState = {
+  rows: [], overrides: {}, candidates: {}, candidatesLoaded: false,
+  dirty: false, search: "", filter: "all", loaded: false, open: null
+};
+
+var PRICE_FILTERS = [
+  { key: "all", label: "Tất cả" },
+  { key: "missing", label: "Chưa có giá" },
+  { key: "candidates", label: "Có ứng viên" },
+  { key: "saved", label: "Đã có giá" }
+];
+
+// A row is "needs a price" when every call in the range went unpriced, or when
+// the user has started typing but not saved yet. Partial coverage (some calls
+// priced, some not) is the second priority group.
+function pricingBucket(row) {
+  var ov = pricingState.overrides[row.model];
+  var hasOverride = !!(ov && Number.isFinite(Number(ov.input)) && ov.input !== "" && ov.input !== null);
+  var priced = Number(row.priced_calls) || 0, unpriced = Number(row.unpriced_calls) || 0;
+  if (hasOverride) return "priced";
+  if (priced === 0 && unpriced > 0) return "missing";
+  if (unpriced > 0) return "partial";
+  if (row.price) return "priced";
+  return "missing";
+}
+
+function pricingRowFilterKeys(row) {
+  var keys = ["all"];
+  var bucket = pricingBucket(row);
+  if (bucket === "missing" || bucket === "partial") keys.push("missing");
+  if (bucket === "priced") keys.push("saved");
+  if ((pricingState.candidates[row.model] || []).length > 0) keys.push("candidates");
+  return keys;
+}
+
+function pricingMatchesFilter(row) {
+  if (pricingState.filter !== "all" && pricingRowFilterKeys(row).indexOf(pricingState.filter) < 0) return false;
+  var q = (pricingState.search || "").trim().toLowerCase();
+  if (!q) return true;
+  return row.model.toLowerCase().indexOf(q) >= 0;
+}
+
+// Unpriced first, then partial, then already priced; each group by traffic.
+function pricingSortedRows() {
+  var order = { missing: 0, partial: 1, priced: 2 };
+  return pricingState.rows.slice().sort(function(a, b) {
+    var d = order[pricingBucket(a)] - order[pricingBucket(b)];
+    if (d !== 0) return d;
+    var c = (Number(b.calls) || 0) - (Number(a.calls) || 0);
+    return c !== 0 ? c : String(a.model).localeCompare(String(b.model));
+  });
+}
+
+function openPricingTab() {
+  document.getElementById("ov-price-search").value = "";
+  pricingState.search = "";
+  document.getElementById("ov-pricing-status").textContent = "Đang tải bảng giá…";
+  document.getElementById("ov-pricing-list").innerHTML = "";
+  document.getElementById("ov-price-filters").innerHTML = "";
+  api(withFilters("/pricing")).then(function(res) {
+    pricingState.rows = res.models || [];
+    pricingState.overrides = {};
+    pricingState.candidates = {};
+    pricingState.candidatesLoaded = false;
+    pricingState.dirty = false;
+    pricingState.loaded = true;
+    pricingState.open = null;
+    pricingState.rows.forEach(function(row) {
+      if (row.override) pricingState.overrides[row.model] = row.override;
+    });
+    // The list is the full catalogue, so say so plainly: "N model" alone looks
+    // wrong next to a price-book count that differs from it.
+    var meta = [];
+    meta.push(pricingState.rows.length + " model");
+    if (res.book_entries) meta.push(res.book_entries + " dòng giá trong " + (res.book_source || "model-router"));
+    if (res.synced_at) meta.push("đồng bộ " + String(res.synced_at).slice(0, 10));
+    if (res.overrides) meta.push(res.overrides + " giá nhập tay");
+    document.getElementById("ov-pricing-meta").textContent = meta.join(" · ") || "Chưa có bảng giá";
+    var missing = pricingState.rows.filter(function(r) {
+      var b = pricingBucket(r); return b === "missing" || b === "partial";
+    }).length;
+    var inRange = pricingState.rows.filter(function(r) { return r.in_range; }).length;
+    document.getElementById("ov-pricing-status").textContent = missing > 0
+      ? missing + " model chưa có giá cần xử lý · " + inRange + " model có lượt gọi trong khoảng đã chọn. Danh sách luôn hiện đủ, không phụ thuộc khoảng thời gian."
+      : "Tất cả " + pricingState.rows.length + " model đều đã có giá.";
+    renderPricingRows();
+  }).catch(function(err) {
+    document.getElementById("ov-pricing-status").textContent = "Không tải được bảng giá: " + err.message;
+  });
+}
+
+function resetPricingEdits() {
+  openPricingTab();
+}
+
+function renderPricingFilters() {
+  var counts = { all: pricingState.rows.length, missing: 0, candidates: 0, saved: 0 };
+  pricingState.rows.forEach(function(row) {
+    pricingRowFilterKeys(row).forEach(function(k) { if (k !== "all") counts[k]++; });
+  });
+  document.getElementById("ov-price-filters").innerHTML = PRICE_FILTERS.map(function(f) {
+    return '<button type="button" class="btn-text" aria-pressed="' +
+      (pricingState.filter === f.key ? "true" : "false") +
+      '" onclick="setPricingFilter(\'' + f.key + '\')">' + esc(f.label) + " (" + counts[f.key] + ")</button>";
+  }).join("");
+}
+
+function setPricingFilter(key) {
+  if (!PRICE_FILTERS.some(function(f) { return f.key === key; })) return;
+  pricingState.filter = key;
+  renderPricingRows();
+}
+
+// When a candidate fills a row, open it so the user can verify the numbers
+// before saving (previously the fields were always on screen).
+function revealPricingRow(model) {
+  pricingState.open = model;
+}
+
+// The source label doubles as the row's toggle button: it already says what
+// the price is, so a separate "Sửa" link beside it only duplicated the row.
+// Clicking it opens the four rate fields. Unpriced rows read "Nhập giá".
+function priceTag(row) {
+  var ov = pricingState.overrides[row.model];
+  var cls = "ov-price-tag", label;
+  if (ov) { cls += " ov-tag-manual"; label = "giá nhập tay"; }
+  else if (row.price) {
+    var src = String(row.price_source || "router");
+    label = src === "manual" ? "nhập tay" : src;
+  } else { cls += " ov-tag-none"; label = "Nhập giá"; }
+  return '<span class="' + cls + '">' + esc(label) + '</span>';
+}
+
+// Mirrors overviewCell(): an unpriced model must never read as $0. Partial
+// coverage keeps the figure but marks it, since some calls really were priced.
+// A merged row hides its provider-prefixed spellings; the tooltip keeps them
+// discoverable so it is clear the traffic of several routes is being summed.
+function akaTitle(row) {
+  var aka = row.also_known_as || [];
+  if (!aka.length) return "";
+  return ' title="Gộp cả: ' + esc(aka.join(", ")) + '"';
+}
+
+// Mirrors overviewCell(): an unpriced model must never read as $0.
+//
+// The no-traffic case matters now that the list shows the whole catalogue: a
+// model with zero calls in the range has both counters at 0, and ovUsd(0) would
+// print "$0" for a model that has no price at all - exactly the fake zero this
+// layer must never show.
+// Mirrors overviewCell(): an unpriced model must never read as $0.
+//
+// "No price" and "no traffic" are different facts and must not be confused.
+// A model with zero calls in the range has both counters at 0, so the counters
+// alone cannot say whether a price exists - fall back to row.price, which the
+// backend resolves from the book even for models that never ran in the range.
+function pricingRowCost(row) {
+  var priced = Number(row.priced_calls) || 0, unpriced = Number(row.unpriced_calls) || 0;
+  if (priced + unpriced === 0) {
+    return row.price ? "chưa có lượt gọi" : "chưa có giá";
+  }
+  if (priced === 0) return "chưa có giá";
+  if (unpriced > 0) return ovUsd(row.cost_usd) + " *";
+  return ovUsd(row.cost_usd);
+}
+
+function pricingRate(value) {
+  return Number.isFinite(Number(value)) && value !== null && value !== "" ? String(Number(value)) : "—";
+}
+
+// One compact line per model. The rate fields are only built when the row is
+// expanded, which keeps the list scannable and stops 20 white inputs from
+// covering the screen.
+function pricingRowHtml(row, index) {
+  var ov = pricingState.overrides[row.model] || {};
+  var price = row.price || {};
+  var eff = function(key) {
+    var v = ov[key];
+    if (v === undefined || v === null) v = price[key];
+    return v;
+  };
+  var bucket = pricingBucket(row);
+  var open = pricingState.open === row.model;
+  var cands = pricingState.candidates[row.model] || [];
+
+  var toggle = ' onclick="togglePricingRow(' + index + ')" role="button" tabindex="0"' +
+    ' onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();togglePricingRow(' + index + ');}"' +
+    ' aria-expanded="' + (open ? "true" : "false") + '" aria-controls="ov-price-detail-' + index + '"' +
+    ' title="Bấm để ' + (open ? "đóng" : "nhập giá") + '"';
+  var cells = '<span class="ov-price-meta ov-price-toggle"' + toggle + '>' +
+    '<span class="ov-price-cell">' + n(row.calls) + ' lượt</span>' +
+    '<span class="ov-price-cell">' + esc(pricingRowCost(row)) + '</span>' +
+    priceTag(row) + '</span>';
+
+  if (!open) {
+    return '<div class="ov-price-row ov-price-' + bucket + '">' +
+      '<div class="ov-price-main"><span class="ov-price-name"' + akaTitle(row) + '>' + esc(row.model) + '</span>' + cells + '</div></div>';
+  }
+
+  var value = function(key) {
+    var v = eff(key);
+    return Number.isFinite(Number(v)) ? Number(v) : "";
+  };
+  var candHtml = "";
+  if (cands.length) {
+    var options = cands.map(function(c, i) {
+      return '<option value="' + i + '">' + esc(c.provider + " · " + c.catalog_model) +
+        " — vào " + c.input + " / ra " + c.output + (c.zero_price ? " (giá 0)" : "") + '</option>';
+    }).join("");
+    candHtml = '<div class="ov-price-cands"><label>Chọn giá từ models.dev (' + cands.length + ' lựa chọn)' +
+      '<select onchange="applyPricingCandidate(' + index + ', this.value)"><option value="">— giữ nguyên —</option>' +
+      options + '</select></label></div>';
+  } else if (pricingState.candidatesLoaded) {
+    candHtml = '<div class="ov-price-hint">models.dev không có mục nào khớp tên model này — nhập giá tay bên dưới.</div>';
+  }
+  return '<div class="ov-price-row ov-price-' + bucket + ' ov-price-row-open">' +
+    '<div class="ov-price-main"><span class="ov-price-name"' + akaTitle(row) + '>' + esc(row.model) + '</span>' + cells + '</div>' +
+    '<div class="ov-price-detail" id="ov-price-detail-' + index + '">' +
+    '<div class="ov-price-grid">' +
+    '<label>Vào (input)<input type="number" min="0" step="0.001" value="' + value("input") + '" oninput="setPricingField(' + index + ',\'input\',this.value)"></label>' +
+    '<label>Ra (output)<input type="number" min="0" step="0.001" value="' + value("output") + '" oninput="setPricingField(' + index + ',\'output\',this.value)"></label>' +
+    '<label>Đọc cache<input type="number" min="0" step="0.001" value="' + value("cache_read") + '" oninput="setPricingField(' + index + ',\'cache_read\',this.value)"></label>' +
+    '<label>Ghi cache<input type="number" min="0" step="0.001" value="' + value("cache_creation") + '" oninput="setPricingField(' + index + ',\'cache_creation\',this.value)"></label>' +
+    '</div>' + candHtml + '</div></div>';
+}
+
+// Only one row is open at a time, so opening another closes the previous one
+// and the list never grows past a screenful.
+function togglePricingRow(index) {
+  var row = pricingState.rows[index];
+  if (!row) return;
+  pricingState.open = pricingState.open === row.model ? null : row.model;
+  renderPricingRows();
+}
+
+function renderPricingRows() {
+  var host = document.getElementById("ov-pricing-list");
+  if (!pricingState.loaded) return;
+  renderPricingFilters();
+  if (!pricingState.rows.length) {
+    host.innerHTML = '<div class="overview-empty">Chưa có model nào trong khoảng thời gian này.</div>';
+    return;
+  }
+  var sorted = pricingSortedRows();
+  // Indices must address the ORIGINAL array: the edit handlers index into
+  // pricingState.rows, so keep a lookup instead of the display position.
+  var indexOf = {};
+  pricingState.rows.forEach(function(row, i) { indexOf[row.model] = i; });
+
+  var groups = {};
+  sorted.forEach(function(row) {
+    if (!pricingMatchesFilter(row)) return;
+    var b = pricingBucket(row);
+    var key = b === "partial" ? "partial:range" : b + ":" + (row.in_range ? "range" : "out");
+    (groups[key] = groups[key] || []).push(row);
+  });
+  // Sub-groups separate models by how they were used, so a row that never ran
+  // in the selected range is still visible (and therefore still priceable).
+  var labels = {
+    "missing:range": "Chưa có giá — có lượt gọi trong khoảng này",
+    "missing:out": "Chưa có giá — không có lượt gọi trong khoảng này",
+    "partial:range": "Một phần lượt chưa có giá",
+    "priced:range": "Đã có giá — có lượt gọi trong khoảng này",
+    "priced:out": "Đã có giá — không có lượt gọi trong khoảng này"
+  };
+  var html = "";
+  ["missing:range", "missing:out", "partial:range", "priced:range", "priced:out"].forEach(function(key) {
+    var rows = groups[key];
+    if (!rows || !rows.length) return;
+    html += '<div class="ov-price-group">' + esc(labels[key]) + " (" + rows.length + ')</div>';
+    html += '<div class="ov-price-table">';
+    html += '<div class="ov-price-head"><span>Model</span>' +
+      '<span class="ov-price-head-meta"><span>Lượt gọi</span><span>Chi phí ước tính</span>' +
+      '<span>Nguồn giá (bấm để sửa)</span></span></div>';
+    html += rows.map(function(row) { return pricingRowHtml(row, indexOf[row.model]); }).join("");
+    html += '</div>';
+  });
+  host.innerHTML = html || '<div class="overview-empty">Không có model nào khớp bộ lọc.</div>';
+}
+
+function setPricingField(index, field, raw) {
+  var row = pricingState.rows[index];
+  if (!row) return;
+  var ov = pricingState.overrides[row.model] || { model: row.model, input: 0, output: 0, cache_read: 0, cache_creation: 0 };
+  var num = Number(raw);
+  ov[field] = Number.isFinite(num) && num >= 0 ? num : 0;
+  pricingState.overrides[row.model] = ov;
+  pricingState.dirty = true;
+  var status = document.getElementById("ov-pricing-status");
+  if (status) status.textContent = "Có thay đổi chưa lưu.";
+}
+
+function applyPricingCandidate(index, raw) {
+  if (raw === "") return;
+  var row = pricingState.rows[index];
+  var cand = (pricingState.candidates[row.model] || [])[Number(raw)];
+  if (!row || !cand) return;
+  pricingState.overrides[row.model] = {
+    model: row.model,
+    input: cand.input,
+    output: cand.output,
+    cache_read: cand.cache_read,
+    cache_creation: cand.cache_creation
+  };
+  pricingState.dirty = true;
+  revealPricingRow(row.model);
+  renderPricingRows();
+  document.getElementById("ov-pricing-status").textContent = "Đã chọn giá từ " + cand.provider + " (chưa lưu).";
+}
+
+function loadPricingCandidates() {
+  var status = document.getElementById("ov-pricing-status");
+  status.textContent = "Đang lấy giá từ models.dev…";
+  api(withFilters("/pricing/sync")).then(function(res) {
+    if (!res.available) {
+      status.textContent = res.error || "models.dev không truy cập được.";
+      return;
+    }
+    pricingState.candidates = {};
+    pricingState.candidatesLoaded = true;
+    (res.groups || []).forEach(function(group) {
+      pricingState.candidates[group.model] = group.candidates || [];
+    });
+    var matched = Object.keys(pricingState.candidates).filter(function(k) {
+      return pricingState.candidates[k].length > 0;
+    }).length;
+    status.textContent = "Đã lấy " + matched + "/" + (res.groups || []).length +
+      " model có giá trên models.dev. Chọn trong danh sách rồi bấm Lưu giá.";
+    renderPricingRows();
+  }).catch(function(err) {
+    status.textContent = "Không lấy được giá: " + err.message;
+  });
+}
+
+function savePricingOverrides() {
+  var status = document.getElementById("ov-pricing-status");
+  var overrides = Object.keys(pricingState.overrides).map(function(key) {
+    return pricingState.overrides[key];
+  });
+  status.textContent = "Đang lưu…";
+  fetch("/v0/management/plugins/usage-statistics/pricing", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + currentMgmtKey },
+    body: JSON.stringify({ overrides: overrides })
+  }).then(function(res) {
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    return res.json();
+  }).then(function() {
+    status.textContent = "Đã lưu " + overrides.length + " giá nhập tay.";
+    pricingState.dirty = false;
+    refreshData();
+    openPricingTab();
+  }).catch(function(err) {
+    status.textContent = "Lưu thất bại: " + err.message;
+  });
+}
+
 // ---- formatters & Timezone UTC+7 -------------------------------------------
 function formatDateTimeExactVN(d) {
   if (!d) d = new Date();
@@ -1356,7 +1955,7 @@ function formatHourBucketVN(hourStr) {
   if (isNaN(d.getTime())) return hourStr;
   var day = d.toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", month: "2-digit", day: "2-digit" });
   var hour = d.toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", hour12: false });
-  return day + " " + hour + "h";
+  return day + " " + hour;
 }
 
 function formatDurationS(sec) {
@@ -1387,6 +1986,367 @@ function esc(str) {
 }
 
 // ---- state & filter management ---------------------------------------------
+// Selective CAP dashboard presentation adaptation; see THIRD_PARTY_NOTICES.md.
+var overviewPrefs = {tokenMode:'auto',pageSize:10,hidden:[]};
+try { var savedOverview=JSON.parse(localStorage.getItem('usage-overview-prefs')||'null'); if(savedOverview){ if(['auto','full','k','m','B'].indexOf(savedOverview.tokenMode)>=0)overviewPrefs.tokenMode=savedOverview.tokenMode; if([10,25,50].indexOf(savedOverview.pageSize)>=0)overviewPrefs.pageSize=savedOverview.pageSize; if(Array.isArray(savedOverview.hidden))overviewPrefs.hidden=savedOverview.hidden; } } catch(ignore) {}
+var overviewPage=0, overviewSort='total_tokens', overviewSortAsc=false;
+var overviewColumns=[
+  {key:'name',label:'Model',type:'text'}, {key:'calls',label:'Lượt gọi',type:'number'},
+  {key:'failed',label:'Lỗi',type:'number'}, {key:'total_tokens',label:'Tổng token',type:'token'},
+  {key:'input_tokens',label:'Đầu vào',type:'token'}, {key:'output_tokens',label:'Đầu ra',type:'token'},
+  {key:'reasoning_tokens',label:'Suy nghĩ',type:'token'}, {key:'cached_tokens',label:'Đọc cache',type:'token'},
+  {key:'avg_latency_ms',label:'Trả lời TB',type:'time'},
+  {key:'cost_usd',label:'Chi phí ước tính',type:'cost'}
+];
+function saveOverviewPrefs(){try{localStorage.setItem('usage-overview-prefs',JSON.stringify(overviewPrefs));}catch(ignore){}}
+function overviewToken(value){
+  if(value===null||value===undefined||!Number.isFinite(Number(value)))return '–';
+  var num=Number(value),mode=overviewPrefs.tokenMode;
+  if(mode==='full')return num.toLocaleString('vi-VN',{maximumFractionDigits:0});
+  if(mode==='auto'){ if(Math.abs(num)>=1e9)mode='B';else if(Math.abs(num)>=1e6)mode='m';else if(Math.abs(num)>=1e3)mode='k';else return num.toLocaleString('vi-VN'); }
+  var scale={k:1e3,m:1e6,B:1e9}[mode];
+  return (num/scale).toLocaleString('vi-VN',{maximumFractionDigits:2})+' '+mode;
+}
+function ovUsd(value){
+  var num=Number(value);
+  if(!Number.isFinite(num))return '–';
+  if(num===0)return '$0';
+  if(Math.abs(num)<0.01)return '$'+num.toFixed(4);
+  return '$'+num.toLocaleString('vi-VN',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+function setOverviewTokenMode(value){if(['auto','full','k','m','B'].indexOf(value)<0)return;overviewPrefs.tokenMode=value;saveOverviewPrefs();if(state.rawSummary)renderOverview(state.rawSummary);}
+function setOverviewPageSize(value){value=Number(value);if([10,25,50].indexOf(value)<0)return;overviewPrefs.pageSize=value;overviewPage=0;saveOverviewPrefs();renderOverviewModelTable();}
+function changeOverviewPage(delta){overviewPage=Math.max(0,overviewPage+delta);renderOverviewModelTable();}
+function sortOverviewModels(key){if(!overviewColumns.some(function(c){return c.key===key;}))return;overviewSortAsc=overviewSort===key?!overviewSortAsc:false;overviewSort=key;overviewPage=0;renderOverviewModelTable();}
+function toggleOverviewColumn(key,visible){if(key==='name')return;overviewPrefs.hidden=overviewPrefs.hidden.filter(function(k){return k!==key;});if(!visible)overviewPrefs.hidden.push(key);saveOverviewPrefs();renderOverviewModelTable();}
+function overviewSortedModels(models){return models.slice().sort(function(a,b){var x=a[overviewSort],y=b[overviewSort];var cmp=overviewSort==='name'?String(x||'').localeCompare(String(y||'')):Number(x||0)-Number(y||0);return (overviewSortAsc?cmp:-cmp)||String(a.name||'').localeCompare(String(b.name||''));});}
+function overviewCell(row,col){
+  var v=row[col.key];
+  if(col.type==='text')return esc(v||'Không rõ model');
+  // Cost is checked before the null guard: a model with no price has no
+  // cost_usd field at all, and it must read "chưa có giá", never $0 or "–".
+  if(col.type==='cost'){
+    var priced=Number(row.priced_calls)||0,unpriced=Number(row.unpriced_calls)||0;
+    if(unpriced>0&&priced===0)return '<button type="button" class="overview-sort ov-noprice" title="Model chưa có giá trong bảng giá — bấm để mở tab Giá Model" onclick="switchTab(\'model_prices\')">chưa có giá</button>';
+    if(priced>0&&unpriced>0)return esc(ovUsd(v))+'<span class="ov-partial" title="Một phần lượt gọi chưa có giá">*</span>';
+    if(priced>0)return esc(ovUsd(v));
+    return '–';
+  }
+  if(v===null||v===undefined)return '–';
+  if(col.type==='token')return esc(overviewToken(v));
+  if(col.type==='time')return Number(v)>0?formatDurationS(Number(v)/1000):'–';
+  return n(v);
+}
+function renderOverviewModelTable(){
+  // scroll hint is applied after the table body is filled (see end of function)
+  var models=overviewSortedModels((state.rawSummary&&state.rawSummary.by_model)||[]),size=overviewPrefs.pageSize;
+  var pages=Math.max(1,Math.ceil(models.length/size));overviewPage=Math.min(overviewPage,pages-1);
+  var columns=overviewColumns.filter(function(c){return c.key==='name'||overviewPrefs.hidden.indexOf(c.key)<0;});
+  document.querySelector('#ov-model-table thead').innerHTML='<tr>'+columns.map(function(c){return '<th'+(c.type==='text'?'':' class="num"')+' aria-sort="'+(overviewSort===c.key?(overviewSortAsc?'ascending':'descending'):'none')+'"><button class="overview-sort" onclick="sortOverviewModels(\''+c.key+'\')">'+esc(c.label)+(overviewSort===c.key?(overviewSortAsc?' ↑':' ↓'):'')+'</button></th>';}).join('')+'</tr>';
+  document.querySelector('#ov-model-table tbody').innerHTML=models.slice(overviewPage*size,(overviewPage+1)*size).map(function(row){return '<tr>'+columns.map(function(c){return '<td'+(c.type==='text'?'':' class="num"')+'>'+overviewCell(row,c)+'</td>';}).join('')+'</tr>';}).join('')||'<tr><td colspan="'+columns.length+'" class="overview-empty">Chưa có lượt gọi trong khoảng thời gian này.</td></tr>';
+  document.getElementById('ov-model-page').textContent='Trang '+(overviewPage+1)+' / '+pages+' · '+models.length+' model';
+  document.getElementById('ov-prev').disabled=overviewPage===0;document.getElementById('ov-next').disabled=overviewPage===pages-1;
+  ovMarkScrollable(document.querySelector('#ov-model-panel .table-wrap'));
+  document.getElementById('ov-page-size').value=String(size);
+}
+function initOverviewControls(){
+  document.getElementById('ov-token-mode').value=overviewPrefs.tokenMode;
+  document.getElementById('ov-column-options').innerHTML=overviewColumns.filter(function(c){return c.key!=='name';}).map(function(c){return '<label><input type="checkbox" '+(overviewPrefs.hidden.indexOf(c.key)<0?'checked':'')+' onchange="toggleOverviewColumn(\''+c.key+'\',this.checked)"> '+esc(c.label)+'</label>';}).join('');
+}
+function renderOverviewExtras(d){
+  var t=d.totals||{},models=(d.by_model||[]).slice().sort(function(a,b){return (b.calls||0)-(a.calls||0)||String(a.name).localeCompare(String(b.name));});
+  document.getElementById('ov-tokens').textContent=overviewToken(t.total_tokens);
+  document.getElementById('ov-token-detail').textContent='Vào '+overviewToken(t.input_tokens)+' · Ra '+overviewToken(t.output_tokens)+' · Cache '+overviewToken(t.cached_tokens);
+  document.getElementById('ov-total').textContent=t.calls==null?'–':n(t.calls);
+  document.getElementById('ov-request-detail').textContent=t.failed==null?'Trong khoảng thời gian đã chọn':n(t.failed)+' lượt lỗi trong khoảng đã chọn';
+  renderOverviewCost(d);
+  var top=models.length&&Number(models[0].calls)>0?models[0]:null;
+  document.getElementById('ov-top-model').textContent=top?top.name:'Chưa có dữ liệu';
+  document.getElementById('ov-top-model-detail').textContent=top?n(top.calls)+' lượt gọi · Đứng đầu theo lượt gọi':'Theo số lượt gọi';
+  renderOverviewDonut(d);
+  renderOverviewTrend(d);
+  renderOverviewModelTable();
+}
+// Estimated cost summary. Never reports an unpriced model as free: the card
+// says how many calls had a price, and lists what is missing in the dialog.
+function renderOverviewCost(d){
+  var t=d.totals||{},pricing=d.pricing||{};
+  var costEl=document.getElementById('ov-cost'),detailEl=document.getElementById('ov-cost-detail');
+  if(!costEl||!detailEl)return;
+  var priced=Number(t.cost_priced_calls||0),unpriced=Number(t.cost_unpriced_calls||0),total=priced+unpriced;
+  var costBtn=document.querySelector('.ov-share-controls [data-share-metric="cost"]');
+  if(!pricing.available){
+    costEl.textContent='Chưa có bảng giá';
+    costEl.classList.add('ov-card-placeholder');
+    detailEl.textContent='Mở tab Giá Model để xem bảng giá hoặc nhập giá tay';
+    if(costBtn){costBtn.disabled=true;costBtn.title='Chưa có bảng giá';}
+    return;
+  }
+  costEl.classList.remove('ov-card-placeholder');
+  costEl.textContent=ovUsd(t.cost_usd)+' *';
+  costEl.title='Ước tính theo bảng giá model-router · '+pricing.entries+' dòng giá';
+  detailEl.textContent=priced.toLocaleString('vi-VN')+'/'+total.toLocaleString('vi-VN')+' lượt có bảng giá'
+    +(unpriced>0?' · '+unpriced.toLocaleString('vi-VN')+' lượt chưa có giá':'');
+  if(costBtn){costBtn.disabled=false;costBtn.title='Tỷ trọng theo chi phí ước tính';}
+}
+var overviewShareMetric='requests',overviewShareFocus=null,overviewSharePinned=null;
+function setOverviewShareMetric(metric){
+  if(metric!=='requests'&&metric!=='tokens'&&metric!=='cost')return;
+  if(metric==='cost'&&!(state.rawSummary&&state.rawSummary.pricing&&state.rawSummary.pricing.available))return;
+  overviewShareMetric=metric;
+  document.querySelectorAll('.ov-share-controls .btn-text').forEach(function(btn){
+    btn.setAttribute('aria-pressed',btn.getAttribute('data-share-metric')===metric?'true':'false');
+  });
+  if(state.rawSummary)renderOverviewDonut(state.rawSummary);
+}
+// CAP-style donut and legend, adapted to existing usage summary fields.
+// ---- overview chart kit (hand-drawn SVG, CAP-inspired: AITNR, MIT) ---------
+// Presentation only: reads existing summary fields, never fabricates points.
+function ovNiceMax(value){
+  if(!(value>0))return 1;
+  var exp=Math.pow(10,Math.floor(Math.log10(value))),f=value/exp;
+  var step=f<=1?1:f<=2?2:f<=2.5?2.5:f<=5?5:10;
+  return step*exp;
+}
+function ovNode(tag,attrs,text){
+  var el=document.createElementNS('http://www.w3.org/2000/svg',tag);
+  Object.keys(attrs||{}).forEach(function(k){el.setAttribute(k,attrs[k]);});
+  if(text!==undefined)el.textContent=text;
+  return el;
+}
+function ovTopRoundedPath(x,y,w,h,r){
+  if(h<=0)return '';
+  r=Math.max(0,Math.min(r,w/2,h));
+  return 'M'+x+' '+(y+h)+' L'+x+' '+(y+r)+' Q'+x+' '+y+' '+(x+r)+' '+y+
+    ' L'+(x+w-r)+' '+y+' Q'+(x+w)+' '+y+' '+(x+w)+' '+(y+r)+' L'+(x+w)+' '+(y+h)+' Z';
+}
+function ovTip(host){
+  var tip=host.querySelector('.ov-tip');
+  if(!tip){tip=document.createElement('div');tip.className='ov-tip';tip.hidden=true;host.appendChild(tip);}
+  return tip;
+}
+function ovShowTip(host,tip,event,html){
+  if(!tip)return;
+  tip.innerHTML=html;tip.hidden=false;
+  var box=host.getBoundingClientRect(),x=(event&&event.clientX?event.clientX-box.left:box.width/2);
+  tip.style.left=Math.max(6,Math.min(box.width-tip.offsetWidth-6,x-tip.offsetWidth/2))+'px';
+  tip.style.top='10px';
+}
+function ovHideTip(tip){tip.hidden=true;}
+
+function ovShareAmount(value){
+  if(overviewShareMetric==='tokens')return overviewToken(value);
+  if(overviewShareMetric==='cost')return ovUsd(value);
+  return n(value);
+}
+function renderOverviewDonut(d){
+  var svg=document.getElementById('ov-share-donut'),legend=document.getElementById('ov-share-legend');
+  var key=overviewShareMetric==='tokens'?'total_tokens':(overviewShareMetric==='cost'?'cost_usd':'calls');
+  var metricLabel=overviewShareMetric==='tokens'?'token':(overviewShareMetric==='cost'?'chi phí ước tính':'lượt gọi');
+  var rows=(d.by_model||[]).filter(function(m){return Number.isFinite(Number(m[key]))&&Number(m[key])>0;})
+    .slice().sort(function(a,b){return Number(b[key])-Number(a[key])||String(a.name).localeCompare(String(b.name));});
+  var total=rows.reduce(function(sum,m){return sum+Number(m[key]);},0);
+  var palette=['#64748b','#4f7c9d','#6a8f7c','#b38a59','#8a7c9e','#9d6e75','#789aab','#90985e'];
+  var labels=(d.by_model||[]).map(function(m){return m.name;}).sort();
+  var offset=0;
+  ovDonutNodes=[];svg.replaceChildren();legend.replaceChildren();
+  svg.appendChild(ovNode('title',{},'Tỷ trọng model theo '+metricLabel));
+  svg.appendChild(ovNode('circle',{cx:140,cy:140,r:86,class:'ov-donut-track'}));
+  if(!total){
+    var empty=document.createElement('div');empty.className='overview-empty';
+    empty.textContent='Chưa có số liệu cho lựa chọn này.';legend.appendChild(empty);
+  }
+  rows.forEach(function(m){
+    var value=Number(m[key]),share=value/total,arc=share*100,gap=Math.min(1.1,arc*0.18);
+    var color=palette[labels.indexOf(m.name)%palette.length];
+    var text=String(m.name)+' · '+ovShareAmount(value)+' · '+(share*100).toFixed(1)+'%';
+    var segment=ovNode('circle',{cx:140,cy:140,r:86,pathLength:100,class:'ov-donut-segment',
+      stroke:color,'stroke-dasharray':Math.max(0.6,arc-gap)+' '+(100-Math.max(0.6,arc-gap)),'stroke-dashoffset':-offset,
+      transform:'rotate(-90 140 140)',tabindex:'0',role:'img','aria-label':text});
+    segment.appendChild(ovNode('title',{},text));svg.appendChild(segment);offset+=arc;
+    var row=document.createElement('div');
+    row.className='ov-donut-legend-row';row.tabIndex=0;row.setAttribute('role','button');
+    row.setAttribute('aria-label',text+' · bấm để làm nổi bật');
+    var swatch=document.createElement('span');swatch.className='ov-donut-swatch';swatch.style.background=color;
+    var name=document.createElement('span');name.className='ov-donut-name';name.textContent=m.name;
+    var amount=document.createElement('span');amount.className='ov-donut-amount';
+    amount.textContent=ovShareAmount(value)+' · '+(share*100).toFixed(1)+'%';
+    row.append(swatch,name,amount);legend.appendChild(row);
+    // Focus is applied by mutating classes in place: re-rendering on hover would
+    // detach the node under the pointer and make the legend unusable.
+    function setFocus(){if(overviewSharePinned){overviewShareFocus=overviewSharePinned;ovApplyDonutFocus(rows,total,key,metricLabel);return;}
+      overviewShareFocus=m.name;ovApplyDonutFocus(rows,total,key,metricLabel);}
+    [segment,row].forEach(function(node){
+      node.addEventListener('mouseenter',setFocus);node.addEventListener('focus',setFocus);
+      node.addEventListener('mouseleave',ovClearDonutFocus);node.addEventListener('blur',ovClearDonutFocus);
+      node.addEventListener('click',function(){
+        overviewSharePinned=overviewSharePinned===m.name?null:m.name;
+        if(overviewSharePinned){setFocus();}else{ovClearDonutFocus();}
+      });
+      node.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();node.click();}});
+    });
+    ovDonutNodes.push({name:m.name,value:value,segment:segment,row:row});
+  });
+  ovDonutCenter={main:ovNode('text',{x:140,y:134,class:'ov-donut-main'},''),sub:ovNode('text',{x:140,y:150,class:'ov-donut-sub'},''),focus:ovNode('text',{x:140,y:170,class:'ov-donut-sub ov-donut-focus'},'')};
+  svg.appendChild(ovDonutCenter.main);svg.appendChild(ovDonutCenter.sub);svg.appendChild(ovDonutCenter.focus);
+  ovApplyDonutFocus(rows,total,key,metricLabel);
+  document.querySelectorAll('[data-share-metric]').forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.shareMetric===overviewShareMetric));});
+}
+function ovClearDonutFocus(){
+  if(overviewSharePinned)return;
+  overviewShareFocus=null;
+  ovDonutNodes.forEach(function(n){n.segment.classList.remove('is-active','is-dim');n.row.classList.remove('is-active','is-dim');});
+  if(ovDonutCenter)ovApplyDonutCenter(null,ovDonutTotal,ovDonutKey,ovDonutMetricLabel);
+}
+function ovApplyDonutFocus(rows,total,key,metricLabel){
+  ovDonutTotal=total;ovDonutKey=key;ovDonutMetricLabel=metricLabel;
+  var active=rows.filter(function(m){return m.name===overviewShareFocus;})[0]||null;
+  ovDonutNodes.forEach(function(n){
+    n.segment.classList.toggle('is-active',!!active&&active.name===n.name);
+    n.row.classList.toggle('is-active',!!active&&active.name===n.name);
+    n.segment.classList.toggle('is-dim',!!active&&active.name!==n.name);
+    n.row.classList.toggle('is-dim',!!active&&active.name!==n.name);
+  });
+  ovApplyDonutCenter(active,total,key,metricLabel);
+}
+function ovApplyDonutCenter(active,total,key,metricLabel){
+  if(!ovDonutCenter)return;
+  var value=active?active[key]:total;
+  ovDonutCenter.main.textContent=total?(value==null?'–':(key==='total_tokens'?overviewToken(Number(value)):n(Number(value)))):'–';
+  ovDonutCenter.sub.textContent=total?(active?((Number(active[key])/total*100).toFixed(1)+'% · '+metricLabel):metricLabel):'';
+  ovDonutCenter.focus.textContent=total&&active?active.name:'';
+}
+var ovDonutNodes=[],ovDonutCenter=null,ovDonutTotal=0,ovDonutKey='calls',ovDonutMetricLabel='lượt gọi';
+function ovHourX(h,rows,L,R,W,cW,span){
+  // Single source of truth for a bucket's x position, clamped to the plot area.
+  // The axis-label picker and the label renderer MUST share it: the clamp can
+  // silently push two labels together, and then they overlap on screen.
+  return Math.max(L+26,Math.min(W-R-26,L+cW*((h.stamp-rows[0].stamp+1800000)/span)));
+}
+function ovTickPositions(rows,L,R,W,cW,span,minGap){
+  var xs=rows.map(function(h){return ovHourX(h,rows,L,R,W,cW,span);});
+  var picked=[],last=-1e9;
+  xs.forEach(function(x,idx){ if(x-last<minGap)return; picked.push(idx); last=x; });
+  var lastIdx=rows.length-1;
+  if(lastIdx>0&&picked.indexOf(lastIdx)<0){
+    // Always label the newest bucket; drop earlier labels until the gap is
+    // legal again, because a clamped neighbour can sit right on top of it.
+    while(picked.length&&xs[lastIdx]-xs[picked[picked.length-1]]<minGap)picked.pop();
+    picked.push(lastIdx);
+  }
+  return picked;
+}
+function ovMarkScrollable(el){
+  if(!el)return;
+  var can=el.scrollWidth>el.clientWidth+2;
+  el.classList.toggle('is-scrollable',can);
+  el.classList.toggle('is-scroll-end',can&&el.scrollLeft+el.clientWidth>=el.scrollWidth-2);
+}
+
+// Token usage trend — stacked hourly bars, rounded caps, shared hover tooltip.
+var overviewTrendVisible={input_tokens:true,output_tokens:true};
+function toggleOverviewTrend(key){
+  if(!Object.prototype.hasOwnProperty.call(overviewTrendVisible,key))return;
+  overviewTrendVisible[key]=!overviewTrendVisible[key];
+  if(state.rawSummary)renderOverviewTrend(state.rawSummary);
+}
+function overviewTrendRows(d){
+  return (d.by_hour||[]).map(function(h){
+    var stamp=Date.parse(String(h.hour).slice(0,13)+':00:00Z');
+    return {stamp:stamp,hour:h.hour,input_tokens:h.input_tokens,output_tokens:h.output_tokens};
+  }).filter(function(h){return Number.isFinite(h.stamp);}).sort(function(a,b){return a.stamp-b.stamp;});
+}
+function renderOverviewTrend(d){
+  var host=document.getElementById('ov-token-trend'),detail=document.getElementById('ov-trend-detail');
+  var tip=null;
+  document.querySelectorAll('[data-trend-series]').forEach(function(b){b.setAttribute('aria-pressed',String(overviewTrendVisible[b.dataset.trendSeries]));});
+  var rows=overviewTrendRows(d);
+  var series=[{key:'input_tokens',label:'Đầu vào',color:'#64748b'},{key:'output_tokens',label:'Đầu ra',color:'#0d9488'}]
+    .filter(function(s){return overviewTrendVisible[s.key];});
+  detail.textContent='Chạm hoặc rê chuột lên cột để xem số liệu.';
+  if(!rows.length){host.replaceChildren();host.innerHTML='<div class="overview-empty">Chưa có số liệu token trong khoảng đã chọn.</div>';detail.textContent='';return;}
+  if(!series.length){host.replaceChildren();host.innerHTML='<div class="overview-empty">Chọn Đầu vào hoặc Đầu ra để hiện biểu đồ.</div>';detail.textContent='';return;}
+  if(!rows.some(function(h){return series.some(function(s){return h[s.key]!=null;});})){
+    host.replaceChildren();host.innerHTML='<div class="overview-empty">Nguồn này chưa cung cấp token đầu vào / đầu ra theo giờ.</div>';detail.textContent='';return;
+  }
+  var W=Math.max(240,host.clientWidth||520),H=Math.max(240,host.clientHeight||300),L=52,R=14,T=18,B=46,cW=W-L-R,cH=H-T-B;
+  var span=rows[rows.length-1].stamp-rows[0].stamp+3600000;
+  var step=cW*3600000/span,bar=Math.max(.8,Math.min(46,step*.66));
+  var rawMax=1;
+  rows.forEach(function(h){var sum=0;series.forEach(function(s){sum+=Math.max(0,Number(h[s.key])||0);});rawMax=Math.max(rawMax,sum);});
+  var max=ovNiceMax(rawMax);
+  var svg=ovNode('svg',{viewBox:'0 0 '+W+' '+H,role:'group','aria-label':'Token đầu vào và đầu ra, cột xếp chồng theo giờ'});
+  for(var i=0;i<=4;i++){
+    var y=T+cH*i/4,val=max*(1-i/4);
+    if(i){svg.appendChild(ovNode('line',{x1:L,y1:y,x2:W-R,y2:y,class:'ov-grid'}));}
+    svg.appendChild(ovNode('text',{x:L-8,y:y+3.5,'text-anchor':'end',class:'ov-axis'},nTok(Math.round(val))));
+  }
+  svg.appendChild(ovNode('line',{x1:L,y1:T+cH,x2:W-R,y2:T+cH,class:'ov-axis-line'}));
+  rows.forEach(function(h,idx){
+    var x=L+cW*((h.stamp-rows[0].stamp+1800000)/span);
+    svg.appendChild(ovNode('rect',{class:'ov-trend-col',x:Math.max(L,x-step/2),y:T,width:Math.min(step,cW),height:cH}));
+    var base=0,top=series.filter(function(s){return Math.max(0,Number(h[s.key])||0)>0;}).slice(-1)[0];
+    series.forEach(function(s){
+      var val=Math.max(0,Number(h[s.key])||0);if(!val)return;
+      var height=cH*val/max,y0=T+cH-(base+val)*cH/max;
+      var attrs={class:'ov-trend-bar',x:x-bar/2,width:bar,fill:s.color,'data-series':s.key,'data-value':val};
+      if(s===top){svg.appendChild(ovNode('path',Object.assign({d:ovTopRoundedPath(x-bar/2,y0,bar,height,3)},attrs)));}
+      else{svg.appendChild(ovNode('rect',Object.assign({y:y0,height:height},attrs)));}
+      base+=val;
+    });
+    var total=0;series.forEach(function(s){total+=Math.max(0,Number(h[s.key])||0);});
+    var label=formatHourBucketVN(h.hour)+' · Đầu vào '+(h.input_tokens==null?'Chưa có':n(h.input_tokens))+' · Đầu ra '+(h.output_tokens==null?'Chưa có':n(h.output_tokens))+' · Tổng '+n(total);
+    var hit=ovNode('rect',{class:'ov-trend-hit',tabindex:'0',role:'img','aria-label':label,x:Math.max(L,x-step/2),y:T,width:Math.min(step,cW),height:cH});
+    hit.appendChild(ovNode('title',{},label));
+    function show(e){detail.textContent=label;ovShowTip(host,tip,e,'<strong>'+esc(formatHourBucketVN(h.hour))+'</strong><span>'+esc(label.split(' · ').slice(1).join(' · '))+'</span>');}
+    hit.addEventListener('mouseenter',show);hit.addEventListener('focus',show);
+    hit.addEventListener('mousemove',show);hit.addEventListener('click',show);
+    hit.addEventListener('mouseleave',function(){ovHideTip(tip);});
+    hit.addEventListener('blur',function(){ovHideTip(tip);});
+    svg.appendChild(hit);
+  });
+  // Two-line labels keep the axis readable without the dates colliding.
+  var tick=ovTickPositions(rows,L,R,W,cW,span,44);
+  rows.forEach(function(h,idx){
+    if(tick.indexOf(idx)<0)return;
+    var x=ovHourX(h,rows,L,R,W,cW,span);
+    var parts=formatHourBucketVN(h.hour).split(' ');
+    var label=ovNode('text',{x:x,y:H-30,'text-anchor':'middle',class:'ov-axis'});
+    label.appendChild(ovNode('tspan',{x:x,dy:0},parts[0]));
+    label.appendChild(ovNode('tspan',{x:x,dy:12},parts.slice(1).join(' ')));
+    svg.appendChild(label);
+  });
+  host.replaceChildren(svg);
+  // replaceChildren removed the tooltip node; re-create it for this render.
+  tip=ovTip(host);ovHideTip(tip);
+}
+
+window.addEventListener('resize',function(){
+  if(state.rawSummary&&state.tab==='overview')renderOverviewTrend(state.rawSummary);
+  ovMarkScrollable(document.querySelector('#ov-model-panel .table-wrap'));
+});
+document.addEventListener('scroll',function(e){
+  if(e.target&&e.target.classList&&e.target.classList.contains('table-wrap'))ovMarkScrollable(e.target);
+},true);
+
+// HTTP error distribution — thin bars with value at the end.
+function renderOverviewErrorBars(items){
+  var box=document.getElementById('ov-chart-errors');
+  if(!box)return;
+  var rows=(items||[]).filter(function(it){return Number(it.calls)>0;});
+  if(!rows.length){box.innerHTML='<div class="overview-empty">Chưa có lỗi HTTP trong khoảng đã chọn.</div>';return;}
+  var max=rows.reduce(function(m,it){return Math.max(m,Number(it.calls));},1);
+  var html='<div class="ov-bars">';
+  rows.slice(0,8).forEach(function(it){
+    var pct=Math.max(0.6,(Number(it.calls)/max)*100);
+    html+='<div class="ov-bar-row" title="'+esc(it.name+': '+n(it.calls)+' lượt lỗi')+'">'+
+      '<span class="ov-bar-label">'+esc(it.name)+'</span>'+
+      '<span class="ov-bar-track"><span class="ov-bar-fill" style="width:'+pct.toFixed(1)+'%"></span></span>'+
+      '<span class="ov-bar-value">'+n(it.calls)+'</span></div>';
+  });
+  box.innerHTML=html+'</div>';
+}
+
 var state = {
   timeRange: "1h",
   tab: "overview",
@@ -1397,6 +2357,18 @@ var state = {
   modelSortCol: "calls",
   modelSortAsc: false
 };
+
+initOverviewControls();
+
+// Joins a path with the time-range filter. buildFilterQueryParams() starts
+// with "&" because it is normally appended to a URL that already has a query
+// string; a bare path needs "?" instead, otherwise the "&" becomes part of the
+// path and CPA returns 404.
+function withFilters(path) {
+  var extra = buildFilterQueryParams();
+  if (!extra) return path;
+  return path + (path.indexOf("?") < 0 ? "?" : "&") + extra.replace(/^&/, "");
+}
 
 function buildFilterQueryParams() {
   var params = [];
@@ -1412,6 +2384,7 @@ function buildFilterQueryParams() {
 }
 
 function setTime(r) {
+  overviewPage=0;
   state.timeRange = r;
   document.querySelectorAll(".pill-btn").forEach(function(btn) {
     btn.classList.toggle("active", btn.getAttribute("data-time") === r);
@@ -1428,13 +2401,19 @@ function switchTab(tabId) {
     p.style.display = (p.id === "tab-" + tabId) ? "block" : "none";
   });
   if (tabId === "requests_log") loadRequests();
+  else if (tabId === "model_prices") { if (state.rawSummary) renderAllViews(); openPricingTab(); }
   else renderAllViews();
 }
 
 function refreshData() {
+  var requestSequence = (state.summarySequence || 0) + 1;
+  state.summarySequence = requestSequence;
+  document.getElementById("summary-error").textContent="Đang cập nhật số liệu…";
   var url = "/usage/summary?source=router" + buildFilterQueryParams();
 
   api(url).then(function(data) {
+    if (requestSequence !== state.summarySequence) return;
+    document.getElementById("summary-error").textContent="";
     state.rawSummary = data;
     renderAllViews();
     if (state.tab === "requests_log") {
@@ -1445,6 +2424,8 @@ function refreshData() {
       lu.textContent = "Cập nhật lúc: " + formatDateTimeExactVN(new Date());
     }
   }).catch(function(err) {
+    if(requestSequence !== state.summarySequence)return;
+    document.getElementById("summary-error").textContent="Không tải được số liệu mới. Dữ liệu đang hiển thị có thể đã cũ. "+err.message;
     console.error("Summary fetch error:", err);
   });
 }
@@ -1462,27 +2443,9 @@ function renderAllViews() {
 // RENDER TAB 1: OVERVIEW (TỔNG QUAN)
 // ==========================================================================
 function renderOverview(d) {
-  var t = d.totals || {};
-  document.getElementById("ov-total").textContent = n(t.calls);
-  document.getElementById("ov-success").textContent = n(t.success || (t.calls - t.failed));
-  document.getElementById("ov-failed").textContent = n(t.failed);
-  var errRate = t.error_rate !== undefined ? t.error_rate : (t.calls ? ((t.failed / t.calls) * 100) : 0);
-  var elErr = document.getElementById("ov-error-rate");
-  if (elErr) {
-    elErr.textContent = errRate.toFixed(1) + "%";
-    elErr.style.color = errRate > 1 ? "var(--bad)" : (errRate > 0 ? "var(--warn)" : "var(--ok)");
-  }
-  document.getElementById("ov-in-tokens").textContent = nTok(t.input_tokens);
-  document.getElementById("ov-out-tokens").textContent = nTok(t.output_tokens);
-
-  renderTimelineArea("ov-chart-volume", d.by_hour, [
-    { key: "success", label: "Thành công", color: "#10b981" },
-    { key: "failed", label: "Thất bại", color: "#f43f5e" }
-  ]);
-
-  renderHorizontalBar("ov-chart-errors", (d.status_codes || []).map(function(s) {
+  renderOverviewErrorBars((d.status_codes || []).map(function(s) {
     return { name: "HTTP " + s.status_code, calls: s.calls, val: s.status_code };
-  }), "#f43f5e", "status_code");
+  }));
 
   var tbody = document.querySelector("#ov-tbl-provider-health tbody");
   var html = "";
@@ -1490,14 +2453,14 @@ function renderOverview(d) {
     html += '<tr>' +
       '<td><strong>' + esc(p.name) + '</strong></td>' +
       '<td class="num">' + n(p.calls) + '</td>' +
-      '<td class="num" style="color:var(--ok)">' + n(p.success || (p.calls - p.failed)) + '</td>' +
-      '<td class="num" style="color:' + (p.failed ? 'var(--bad)' : 'var(--text)') + '">' + n(p.failed) + '</td>' +
+      '<td class="num"><span style="color:var(--ok)">' + n(p.success || (p.calls - p.failed)) + '</span>/<span style="color:var(--bad)">' + n(p.failed) + '</span></td>' +
       '<td class="num" style="color:' + (p.failed ? 'var(--bad)' : 'var(--ok)') + '">' + (p.error_rate||0).toFixed(1) + '%</td>' +
       '<td class="num">' + formatDurationS(p.p50_latency_s) + '</td>' +
       '<td class="num">' + formatDurationS(p.p90_latency_s) + '</td>' +
       '</tr>';
   });
-  tbody.innerHTML = html;
+  tbody.innerHTML = html || '<tr><td colspan="6" class="overview-empty">Chưa có số liệu nhà cung cấp.</td></tr>';
+  renderOverviewExtras(d);
 }
 
 // ==========================================================================
@@ -1821,6 +2784,7 @@ function loadErrorLogForDetail(r) {
 // SVG CHART GENERATORS
 // ==========================================================================
 function renderTimelineArea(containerId, data, series) {
+  var isDuration=series.every(function(s){return /latency|ttft/.test(s.key);});
   var box = document.getElementById(containerId);
   if (!box) return;
   if (!data || !data.length) {
@@ -1843,7 +2807,7 @@ function renderTimelineArea(containerId, data, series) {
     var y = pT + cH * (i / 3);
     var v = maxVal * (1 - i / 3);
     svg += '<line x1="' + pL + '" y1="' + y + '" x2="' + (W - pR) + '" y2="' + y + '" stroke="var(--border)" stroke-dasharray="2,2"/>';
-    svg += '<text x="' + (pL - 6) + '" y="' + (y + 3) + '" fill="var(--text-muted)" font-size="9" text-anchor="end" font-family="var(--mono)">' + (maxVal < 10 ? v.toFixed(1)+'s' : nTok(Math.round(v))) + '</text>';
+    svg += '<text x="' + (pL - 6) + '" y="' + (y + 3) + '" fill="var(--text-muted)" font-size="9" text-anchor="end" font-family="var(--mono)">' + (isDuration ? v.toFixed(1)+'s' : nTok(Math.round(v))) + '</text>';
   }
 
   series.forEach(function(s) {
@@ -1862,11 +2826,11 @@ function renderTimelineArea(containerId, data, series) {
     svg += '<path d="' + dPath + '" fill="none" stroke="' + s.color + '" stroke-width="2"/>';
 
     points.forEach(function(p) {
-      svg += '<circle cx="' + p.x + '" cy="' + p.y + '" r="2.5" fill="' + s.color + '" onmouseenter="showTooltip(event, \'' + esc(formatHourBucketVN(p.label)) + ': ' + (p.val < 10 ? p.val.toFixed(2)+'s' : n(p.val)) + ' (' + s.label + ')\')" onmouseleave="hideTooltip()"/>';
+      svg += '<circle cx="' + p.x + '" cy="' + p.y + '" r="2.5" fill="' + s.color + '" onmouseenter="showTooltip(event, \'' + esc(formatHourBucketVN(p.label)) + ': ' + (isDuration ? p.val.toFixed(2)+'s' : n(p.val)) + ' (' + s.label + ')\')" onmouseleave="hideTooltip()"/>';
     });
   });
 
-  var step = Math.max(1, Math.floor(data.length / 5));
+  var step = Math.max(1, Math.ceil(data.length / Math.max(2, Math.floor(cW / 105))));
   for (var i = 0; i < data.length; i += step) {
     var x = pL + cW * (i / (data.length - 1 || 1));
     var lbl = formatHourBucketVN(data[i].hour);

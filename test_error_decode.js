@@ -8,7 +8,7 @@
 const fs = require("fs");
 const path = require("path");
 
-const html = fs.readFileSync(path.join(__dirname, "dashboard.html"), "utf8");
+const html = fs.readFileSync(path.join(__dirname, "dashboard2.html"), "utf8");
 const m = html.match(/<script>([\s\S]*)<\/script>/);
 if (!m) throw new Error("no <script> block");
 const src = m[1];

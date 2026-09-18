@@ -29,10 +29,18 @@ function obfuscate(plain) {
 
 // Extract the <script> body and keep only the auth helpers (before the theme
 // section) so no DOM/network code runs in the test.
-const html = fs.readFileSync(path.join(__dirname, "dashboard.html"), "utf8");
+//
+// This reads dashboard2.html — the page CPA actually serves. The marker must
+// EXIST: an absent marker makes indexOf return -1, slice(0, -1) keeps the whole
+// script, and the DOM code then runs headless and throws. Assert instead.
+const PAGE = "dashboard2.html";
+const THEME_MARKER = "// ---- host theme sync";
+const html = fs.readFileSync(path.join(__dirname, PAGE), "utf8");
 const m = html.match(/<script>([\s\S]*)<\/script>/);
-if (!m) throw new Error("no <script> block found in dashboard.html");
-const authSrc = m[1].slice(0, m[1].indexOf("// ---- theme"));
+if (!m) throw new Error(`no <script> block found in ${PAGE}`);
+const cut = m[1].indexOf(THEME_MARKER);
+if (cut < 0) throw new Error(`marker ${JSON.stringify(THEME_MARKER)} not found in ${PAGE}: cannot isolate the auth helpers`);
+const authSrc = m[1].slice(0, cut);
 
 // The auth helpers only need: window.location.host, navigator.userAgent,
 // localStorage, sessionStorage, document.getElementById.

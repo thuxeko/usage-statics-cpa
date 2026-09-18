@@ -1,5 +1,19 @@
 # Usage Statistics Plugin for CLIProxyAPI (CPA)
 
+## Tổng quan gọn — cập nhật 2026-09-17 (chờ deploy)
+- Đúng 4 card theo CAP: Tổng token (Vào/Ra/Cache), Chi phí ước tính (Chưa cấu hình), Tổng lượt gọi, Model dùng nhiều nhất theo lượt gọi.
+- Hàng biểu đồ: Token usage trend (cột xếp chồng đầu vào/đầu ra, làm tròn đỉnh, bật tắt từng thành phần, tooltip chung khi rê/chạm) cạnh Model usage share (vòng tròn có khe hở, rê hoặc bấm để làm nổi bật một model, số ở tâm đổi theo model đang chọn).
+- Hàng dưới: Sức khỏe Nhà cung cấp cạnh Phân bố Mã lỗi HTTP; Mức sử dụng từng model chiếm một hàng riêng đủ rộng. Cột TC/TB gộp Thành công/Thất bại và luôn tô màu hai bên: thành công xanh, thất bại đỏ, kể cả khi có lỗi. Bảng model có gợi ý cuộn ngang khi tràn cột.
+- Biểu đồ vẫn tự vẽ bằng SVG thuần, không thêm thư viện ngoài; trục số làm tròn đẹp, nhãn trục hai dòng không đè nhau, giữ đúng tỷ lệ theo thời gian thực tế.
+- Trend dùng dữ liệu `by_hour` hiện có, trục giờ Việt Nam. Cache read / cache hit rate tạm vô hiệu hoá vì chưa có dữ liệu cache và quy ước tính cache theo giờ; không suy diễn số liệu. Không port zoom/phân giải phút từ CAP.
+- Hàng dưới: Mức sử dụng từng model cạnh Phân bố Mã lỗi HTTP. Trên mobile, các panel xếp dọc; bảng model cuộn ngang trong card.
+- Bỏ chọn ngày giờ cụ thể, chỉ giữ preset 1h / 6h / 24h / 7d / tất cả; mặc định 1h. Bỏ biểu đồ lưu lượng request khỏi Tổng quan.
+- Chọn cách hiển thị token đầy đủ / k / m / B; giữ sắp xếp, chọn cột và phân trang bảng model.
+- Tab Hiệu năng & Độ trễ ẩn nút điều hướng, giữ mã và nội dung. Giữ nguyên Tools, API, xác thực, SQLite/model-router và chi tiết request; chưa làm phần giá.
+- Bản sửa bố cục/trend chỉ build vào staging; chờ người dùng duyệt trước khi copy plugin live và restart Docker.
+- Attribution: xem THIRD_PARTY_NOTICES.md.
+
+
 Plugin nội tuyến (Go C-ABI Shared Object `.so`) dành cho **CLIProxyAPI (CPA)** để thu thập số liệu, thống kê lưu lượng, độ trễ và phân tích chi tiết hoạt động của các LLM Models / Providers qua Router Gateway.
 
 ---
@@ -46,7 +60,7 @@ Dashboard được thiết kế theo phong cách tối giản, hiện đại (Li
 - **Tự động đồng bộ Theme**: Lắng nghe `MutationObserver` từ CPAMC, tự động chuyển đổi Sáng/Tối mượt mà khi người dùng đổi theme trên thanh công cụ CPA.
 - **Tự động làm mới (Auto-refresh)**: Menu chọn chu kỳ `Tắt`, `30s`, `1 phút`, `5 phút`, `15 phút`, `30 phút` kèm ghi nhớ `localStorage` và tự động tạm dừng khi rời tab.
 - **Thời gian cập nhật**: Hiển thị chính xác mốc thời gian vừa kéo dữ liệu: `Cập nhật lúc: dd/MM/yyyy HH:mm:ss` (Giờ VN).
-- **Bộ lọc Thời gian nhanh (Time Pills)**: Chọn nhanh khoảng thời gian `1 giờ`, `6 giờ`, `24 giờ`, `7 ngày` (mặc định), `Tất cả`.
+- **Bộ lọc Thời gian nhanh (Time Pills)**: Chọn nhanh khoảng thời gian `1 giờ` (mặc định), `6 giờ`, `24 giờ`, `7 ngày`, `Tất cả`.
 
 ### 2. Các Tab chức năng chính
 
