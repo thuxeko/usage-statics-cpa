@@ -170,6 +170,31 @@ body {
   color: var(--text);
   box-shadow: 0 1px 3px rgba(0,0,0,0.2);
 }
+.time-pills { flex-wrap: wrap; }
+.range-custom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 6px 8px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.range-custom[hidden] { display: none; }
+.range-custom input[type="datetime-local"] {
+  background: var(--bg-card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 3px 6px;
+  font-size: 11px;
+  font-family: var(--mono);
+}
+.range-error { color: #f43f5e; }
 .filter-select {
   background: var(--bg-card);
   color: var(--text);
@@ -734,11 +759,21 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
     <div class="filter-row">
       <!-- Time Presets -->
       <div class="time-pills">
-        <button class="pill-btn active" data-time="1h" onclick="setTime('1h')">1 giờ</button>
         <button class="pill-btn" data-time="6h" onclick="setTime('6h')">6 giờ</button>
-        <button class="pill-btn" data-time="24h" onclick="setTime('24h')">24 giờ</button>
-        <button class="pill-btn" data-time="7d" onclick="setTime('7d')">7 ngày</button>
+        <button class="pill-btn active" data-time="today" onclick="setTime('today')">Hôm nay</button>
+        <button class="pill-btn" data-time="yesterday" onclick="setTime('yesterday')">Hôm qua</button>
+        <button class="pill-btn" data-time="month" onclick="setTime('month')">Tháng này</button>
+        <button class="pill-btn" data-time="lastmonth" onclick="setTime('lastmonth')">Tháng trước</button>
         <button class="pill-btn" data-time="all" onclick="setTime('all')">Tất cả</button>
+        <button class="pill-btn" data-time="custom" onclick="toggleCustomRange()">Tùy chỉnh</button>
+      </div>
+      <div id="range-custom" class="range-custom" hidden>
+        <label for="range-start">Từ</label>
+        <input type="datetime-local" id="range-start" step="60">
+        <label for="range-end">Đến</label>
+        <input type="datetime-local" id="range-end" step="60">
+        <button class="btn-text" onclick="applyCustomRange()">Áp dụng</button>
+        <span id="range-error" class="range-error" role="status" aria-live="polite"></span>
       </div>
     </div>
   </div>
@@ -2217,14 +2252,16 @@ function ovApplyDonutCenter(active,total,key,metricLabel){
   ovDonutCenter.focus.textContent=total&&active?active.name:'';
 }
 var ovDonutNodes=[],ovDonutCenter=null,ovDonutTotal=0,ovDonutKey='calls',ovDonutMetricLabel='lượt gọi';
-function ovHourX(h,rows,L,R,W,cW,span){
+function ovHourX(h,rows,L,R,W,cW,span,unit){
   // Single source of truth for a bucket's x position, clamped to the plot area.
   // The axis-label picker and the label renderer MUST share it: the clamp can
   // silently push two labels together, and then they overlap on screen.
-  return Math.max(L+26,Math.min(W-R-26,L+cW*((h.stamp-rows[0].stamp+1800000)/span)));
+  // `unit` is the bucket width: 3600000 (hour) or 86400000 (day-collapsed).
+  var half=(unit||3600000)/2;
+  return Math.max(L+26,Math.min(W-R-26,L+cW*((h.stamp-rows[0].stamp+half)/span)));
 }
-function ovTickPositions(rows,L,R,W,cW,span,minGap){
-  var xs=rows.map(function(h){return ovHourX(h,rows,L,R,W,cW,span);});
+function ovTickPositions(rows,L,R,W,cW,span,minGap,unit){
+  var xs=rows.map(function(h){return ovHourX(h,rows,L,R,W,cW,span,unit);});
   var picked=[],last=-1e9;
   xs.forEach(function(x,idx){ if(x-last<minGap)return; picked.push(idx); last=x; });
   var lastIdx=rows.length-1;
@@ -2261,6 +2298,8 @@ function renderOverviewTrend(d){
   var tip=null;
   document.querySelectorAll('[data-trend-series]').forEach(function(b){b.setAttribute('aria-pressed',String(overviewTrendVisible[b.dataset.trendSeries]));});
   var rows=overviewTrendRows(d);
+  if(shouldBucketByDay())rows=bucketRowsByDay(rows);
+  var unit=shouldBucketByDay()?86400000:3600000;
   var series=[{key:'input_tokens',label:'Đầu vào',color:'#64748b'},{key:'output_tokens',label:'Đầu ra',color:'#0d9488'}]
     .filter(function(s){return overviewTrendVisible[s.key];});
   detail.textContent='Chạm hoặc rê chuột lên cột để xem số liệu.';
@@ -2270,8 +2309,8 @@ function renderOverviewTrend(d){
     host.replaceChildren();host.innerHTML='<div class="overview-empty">Nguồn này chưa cung cấp token đầu vào / đầu ra theo giờ.</div>';detail.textContent='';return;
   }
   var W=Math.max(240,host.clientWidth||520),H=Math.max(240,host.clientHeight||300),L=52,R=14,T=18,B=46,cW=W-L-R,cH=H-T-B;
-  var span=rows[rows.length-1].stamp-rows[0].stamp+3600000;
-  var step=cW*3600000/span,bar=Math.max(.8,Math.min(46,step*.66));
+  var span=rows[rows.length-1].stamp-rows[0].stamp+unit;
+  var step=cW*unit/span,bar=Math.max(.8,Math.min(46,step*.66));
   var rawMax=1;
   rows.forEach(function(h){var sum=0;series.forEach(function(s){sum+=Math.max(0,Number(h[s.key])||0);});rawMax=Math.max(rawMax,sum);});
   var max=ovNiceMax(rawMax);
@@ -2283,7 +2322,7 @@ function renderOverviewTrend(d){
   }
   svg.appendChild(ovNode('line',{x1:L,y1:T+cH,x2:W-R,y2:T+cH,class:'ov-axis-line'}));
   rows.forEach(function(h,idx){
-    var x=L+cW*((h.stamp-rows[0].stamp+1800000)/span);
+    var x=L+cW*((h.stamp-rows[0].stamp+unit/2)/span);
     svg.appendChild(ovNode('rect',{class:'ov-trend-col',x:Math.max(L,x-step/2),y:T,width:Math.min(step,cW),height:cH}));
     var base=0,top=series.filter(function(s){return Math.max(0,Number(h[s.key])||0)>0;}).slice(-1)[0];
     series.forEach(function(s){
@@ -2295,10 +2334,11 @@ function renderOverviewTrend(d){
       base+=val;
     });
     var total=0;series.forEach(function(s){total+=Math.max(0,Number(h[s.key])||0);});
-    var label=formatHourBucketVN(h.hour)+' · Đầu vào '+(h.input_tokens==null?'Chưa có':n(h.input_tokens))+' · Đầu ra '+(h.output_tokens==null?'Chưa có':n(h.output_tokens))+' · Tổng '+n(total);
+    var rowLabel=unit===86400000?formatDayBucketVN(h.stamp):formatHourBucketVN(h.hour);
+    var label=rowLabel+' · Đầu vào '+(h.input_tokens==null?'Chưa có':n(h.input_tokens))+' · Đầu ra '+(h.output_tokens==null?'Chưa có':n(h.output_tokens))+' · Tổng '+n(total);
     var hit=ovNode('rect',{class:'ov-trend-hit',tabindex:'0',role:'img','aria-label':label,x:Math.max(L,x-step/2),y:T,width:Math.min(step,cW),height:cH});
     hit.appendChild(ovNode('title',{},label));
-    function show(e){detail.textContent=label;ovShowTip(host,tip,e,'<strong>'+esc(formatHourBucketVN(h.hour))+'</strong><span>'+esc(label.split(' · ').slice(1).join(' · '))+'</span>');}
+    function show(e){detail.textContent=label;ovShowTip(host,tip,e,'<strong>'+esc(rowLabel)+'</strong><span>'+esc(label.split(' · ').slice(1).join(' · '))+'</span>');}
     hit.addEventListener('mouseenter',show);hit.addEventListener('focus',show);
     hit.addEventListener('mousemove',show);hit.addEventListener('click',show);
     hit.addEventListener('mouseleave',function(){ovHideTip(tip);});
@@ -2306,14 +2346,14 @@ function renderOverviewTrend(d){
     svg.appendChild(hit);
   });
   // Two-line labels keep the axis readable without the dates colliding.
-  var tick=ovTickPositions(rows,L,R,W,cW,span,44);
+  var tick=ovTickPositions(rows,L,R,W,cW,span,44,unit);
   rows.forEach(function(h,idx){
     if(tick.indexOf(idx)<0)return;
-    var x=ovHourX(h,rows,L,R,W,cW,span);
-    var parts=formatHourBucketVN(h.hour).split(' ');
+    var x=ovHourX(h,rows,L,R,W,cW,span,unit);
+    var parts=(unit===86400000?formatDayBucketVN(h.stamp):formatHourBucketVN(h.hour)).split(' ');
     var label=ovNode('text',{x:x,y:H-30,'text-anchor':'middle',class:'ov-axis'});
     label.appendChild(ovNode('tspan',{x:x,dy:0},parts[0]));
-    label.appendChild(ovNode('tspan',{x:x,dy:12},parts.slice(1).join(' ')));
+    if(parts.length>1)label.appendChild(ovNode('tspan',{x:x,dy:12},parts.slice(1).join(' ')));
     svg.appendChild(label);
   });
   host.replaceChildren(svg);
@@ -2347,8 +2387,158 @@ function renderOverviewErrorBars(items){
   box.innerHTML=html+'</div>';
 }
 
+// --- Time range presets (2026-09-21) ----------------------------------------
+// Rolling windows (6h, all) stay open-ended. Calendar windows (today,
+// yesterday, this month, last month) are CLOSED: they MUST send an explicit
+// `end`, otherwise "hôm qua" would silently run up to the current second.
+// The backend reads the range as [start, end).
+function pad2(n){ return (n<10?"0":"")+n; }
+// Offset (minutes) between the viewer's clock and Vietnam time, so presets
+// follow Asia/Ho_Chi_Minh even when the browser sits in another timezone.
+function vnOffsetMin(){
+  var d=new Date();
+  var s=d.toLocaleString("sv-SE",{timeZone:"Asia/Ho_Chi_Minh"}).replace(","," ");
+  var p=s.split(/[- :]/);
+  var asUTC=Date.UTC(+p[0],+p[1]-1,+p[2],+p[3],+p[4],+p[5]);
+  return Math.round((asUTC-d.getTime())/60000);
+}
+// Vietnam wall-clock Y/M/D h:m -> real Date
+function vnDate(y,m,d,h,mi){
+  return new Date(Date.UTC(y,m-1,d,h,mi,0)-vnOffsetMin()*60000);
+}
+function vnParts(base){
+  var d=base||new Date();
+  var s=d.toLocaleString("sv-SE",{timeZone:"Asia/Ho_Chi_Minh"}).replace(","," ");
+  var p=s.split(/[- :]/);
+  return {y:+p[0],m:+p[1],d:+p[2],h:+p[3],mi:+p[4]};
+}
+function rangeBounds(range){
+  var now=new Date();
+  if(range==="6h") return {start:new Date(now.getTime()-6*3600000),end:null};
+  var v=vnParts(now);
+  if(range==="today") return {start:vnDate(v.y,v.m,v.d,0,0),end:null};
+  if(range==="yesterday"){
+    var y=vnParts(new Date(vnDate(v.y,v.m,v.d,0,0).getTime()-86400000));
+    return {start:vnDate(y.y,y.m,y.d,0,0),end:vnDate(v.y,v.m,v.d,0,0)};
+  }
+  if(range==="month"){
+    // This month: from the 1st (midnight VN) up to now — a live, half-open window.
+    return {start:vnDate(v.y,v.m,1,0,0),end:null};
+  }
+  if(range==="lastmonth"){
+    // Last calendar month: 1st of last month (midnight VN) up to the 1st of this month.
+    var f=vnParts(new Date(vnDate(v.y,v.m,1,0,0).getTime()-86400000));
+    return {start:vnDate(f.y,f.m,1,0,0),end:vnDate(v.y,v.m,1,0,0)};
+  }
+  if(range==="custom"&&state.customStart&&state.customEnd){
+    var a=new Date(state.customStart),b=new Date(state.customEnd);
+    if(Number.isFinite(a.getTime())&&Number.isFinite(b.getTime())&&a<b) return {start:a,end:b};
+  }
+  return {start:null,end:null}; // "all"
+}
+function customRangeLabel(){
+  var a=new Date(state.customStart),b=new Date(state.customEnd);
+  if(!Number.isFinite(a.getTime())||!Number.isFinite(b.getTime()))return "Tùy chỉnh";
+  function f(d){var p=vnParts(d);return pad2(p.d)+"/"+pad2(p.m)+" "+pad2(p.h)+":"+pad2(p.mi);}
+  return f(a)+" → "+f(b);
+}
+// A month is ~720 hourly buckets: drawn as-is the trend becomes an unreadable
+// picket fence, so collapse it to one bar per day. Done in the frontend on
+// purpose — the backend keeps returning by_hour untouched (no rebuild).
+function shouldBucketByDay(){
+  var b=rangeBounds(state.timeRange);
+  if(!b.start) return false;
+  var end=b.end||new Date();
+  return (end.getTime()-b.start.getTime())>3*86400000;
+}
+function bucketRowsByDay(rows){
+  var out=[],map={};
+  rows.forEach(function(r){
+    var p=vnParts(new Date(r.stamp));
+    var key=p.y+"-"+pad2(p.m)+"-"+pad2(p.d);
+    if(!map[key]){
+      map[key]={key:key,stamp:vnDate(p.y,p.m,p.d,0,0).getTime(),hour:key,
+        input_tokens:null,output_tokens:null,p50_latency_s:null,p90_latency_s:null,
+        p95_latency_s:null,p99_latency_s:null,_calls:0,_w:0};
+      out.push(map[key]);
+    }
+    var g=map[key],calls=Math.max(0,Number(r._calls||0));
+    g._calls+=calls;
+    if(r.input_tokens!=null)g.input_tokens=(g.input_tokens||0)+Number(r.input_tokens||0);
+    if(r.output_tokens!=null)g.output_tokens=(g.output_tokens||0)+Number(r.output_tokens||0);
+    // Percentiles cannot be summed; show a call-weighted average for the day.
+    ["p50_latency_s","p90_latency_s","p95_latency_s","p99_latency_s"].forEach(function(k){
+      if(r[k]!=null&&calls>0){g[k]=(g[k]||0)+Number(r[k])*calls;g._w+=calls;}
+    });
+  });
+  out.forEach(function(g){
+    ["p50_latency_s","p90_latency_s","p95_latency_s","p99_latency_s"].forEach(function(k){
+      if(g[k]!=null&&g._w>0)g[k]=g[k]/g._w;
+    });
+    delete g._calls;delete g._w;
+  });
+  return out.sort(function(a,b){return a.stamp-b.stamp;});
+}
+function formatDayBucketVN(stamp){
+  var p=vnParts(new Date(stamp));
+  return pad2(p.d)+"/"+pad2(p.m);
+}
+function formatBucketLabel(row){
+  if(row&&row.stamp&&shouldBucketByDay())return formatDayBucketVN(row.stamp);
+  return formatHourBucketVN(row?row.hour:"");
+}
+// by_hour rows -> rows carrying a parsed stamp (+ call counts for weighting),
+// day-collapsed when the selected window is long.
+function trendRowsForRange(byHour){
+  var rows=(byHour||[]).map(function(h){
+    var o={};for(var k in h)o[k]=h[k];
+    o.stamp=Date.parse(String(h.hour).slice(0,13)+":00:00Z");
+    o._calls=Number(h.calls||0);
+    return o;
+  }).filter(function(r){return Number.isFinite(r.stamp);})
+    .sort(function(a,b){return a.stamp-b.stamp;});
+  if(shouldBucketByDay())rows=bucketRowsByDay(rows);
+  return rows;
+}
+function toggleCustomRange(){
+  var box=document.getElementById("range-custom");
+  if(!box)return;
+  if(box.hasAttribute("hidden")){
+    box.removeAttribute("hidden");
+    var v=vnParts(new Date());
+    function val(d){var p=vnParts(d);return p.y+"-"+pad2(p.m)+"-"+pad2(p.d)+"T"+pad2(p.h)+":"+pad2(p.mi);}
+    var st=document.getElementById("range-start"),en=document.getElementById("range-end");
+    if(st&&!st.value)st.value=val(vnDate(v.y,v.m,v.d,0,0));
+    if(en&&!en.value)en.value=val(new Date());
+  }else{
+    box.setAttribute("hidden","");
+  }
+}
+function validateCustomRange(start,end){
+  var a=new Date(start),b=new Date(end);
+  if(!start||!end||!Number.isFinite(a.getTime())||!Number.isFinite(b.getTime()))return "Chọn đủ ngày giờ bắt đầu và kết thúc.";
+  if(a>=b)return "Thời gian kết thúc phải sau thời gian bắt đầu.";
+  return "";
+}
+function applyCustomRange(){
+  var st=document.getElementById("range-start"),en=document.getElementById("range-end"),err=document.getElementById("range-error");
+  var msg=validateCustomRange(st?st.value:"",en?en.value:"");
+  if(err)err.textContent=msg;
+  if(msg)return;
+  state.customStart=new Date(st.value).toISOString();
+  state.customEnd=new Date(en.value).toISOString();
+  state.timeRange="custom";
+  overviewPage=0;
+  document.querySelectorAll(".pill-btn").forEach(function(b){
+    b.classList.toggle("active",b.getAttribute("data-time")==="custom");
+  });
+  refreshData();
+}
+
 var state = {
-  timeRange: "1h",
+  timeRange: "today",
+  customStart: null,
+  customEnd: null,
   tab: "overview",
   reqOffset: 0,
   reqLimit: 15,
@@ -2372,20 +2562,16 @@ function withFilters(path) {
 
 function buildFilterQueryParams() {
   var params = [];
-  var now = new Date();
-  var start = null;
-  if (state.timeRange === "1h") start = new Date(now.getTime() - 1 * 3600 * 1000);
-  else if (state.timeRange === "6h") start = new Date(now.getTime() - 6 * 3600 * 1000);
-  else if (state.timeRange === "24h") start = new Date(now.getTime() - 24 * 3600 * 1000);
-  else if (state.timeRange === "7d") start = new Date(now.getTime() - 7 * 24 * 3600 * 1000);
-
-  if (start) params.push("start=" + encodeURIComponent(start.toISOString()));
+  var b = rangeBounds(state.timeRange);
+  if (b.start) params.push("start=" + encodeURIComponent(b.start.toISOString()));
+  if (b.end) params.push("end=" + encodeURIComponent(b.end.toISOString()));
   return params.length ? "&" + params.join("&") : "";
 }
 
 function setTime(r) {
   overviewPage=0;
   state.timeRange = r;
+  var err=document.getElementById("range-error"); if(err)err.textContent="";
   document.querySelectorAll(".pill-btn").forEach(function(btn) {
     btn.classList.toggle("active", btn.getAttribute("data-time") === r);
   });
@@ -2528,7 +2714,7 @@ function renderPerformance(d) {
   document.getElementById("pf-ttft-p50").textContent = formatDurationS(t.p50_ttft_s);
   document.getElementById("pf-ttft-p90").textContent = formatDurationS(t.p90_ttft_s);
 
-  renderTimelineArea("pf-chart-latency-trend", d.by_hour, [
+  renderTimelineArea("pf-chart-latency-trend", trendRowsForRange(d.by_hour), [
     { key: "p50_latency_s", label: "P50", color: "#06b6d4" },
     { key: "p90_latency_s", label: "P90", color: "#6366f1" },
     { key: "p95_latency_s", label: "P95", color: "#f59e0b" },
@@ -2582,7 +2768,7 @@ function renderTokensEfficiency(d) {
   var hitRate = t.calls ? ((t.cache_hit_calls / t.calls) * 100).toFixed(1) + "%" : "0%";
   document.getElementById("te-cache-rate").textContent = hitRate;
 
-  renderTimelineArea("te-chart-token-trend", d.by_hour, [
+  renderTimelineArea("te-chart-token-trend", trendRowsForRange(d.by_hour), [
     { key: "input_tokens", label: "Input Context", color: "#a855f7" },
     { key: "output_tokens", label: "Output Tokens", color: "#10b981" }
   ]);
@@ -2815,7 +3001,7 @@ function renderTimelineArea(containerId, data, series) {
     data.forEach(function(d, idx) {
       var x = pL + cW * (idx / (data.length - 1 || 1));
       var y = pT + cH * (1 - (d[s.key] || 0) / maxVal);
-      points.push({ x: x, y: y, val: d[s.key] || 0, label: d.hour });
+      points.push({ x: x, y: y, val: d[s.key] || 0, label: d.hour, stamp: d.stamp });
     });
 
     var dPath = "M " + points[0].x + " " + points[0].y;
@@ -2826,14 +3012,14 @@ function renderTimelineArea(containerId, data, series) {
     svg += '<path d="' + dPath + '" fill="none" stroke="' + s.color + '" stroke-width="2"/>';
 
     points.forEach(function(p) {
-      svg += '<circle cx="' + p.x + '" cy="' + p.y + '" r="2.5" fill="' + s.color + '" onmouseenter="showTooltip(event, \'' + esc(formatHourBucketVN(p.label)) + ': ' + (isDuration ? p.val.toFixed(2)+'s' : n(p.val)) + ' (' + s.label + ')\')" onmouseleave="hideTooltip()"/>';
+      svg += '<circle cx="' + p.x + '" cy="' + p.y + '" r="2.5" fill="' + s.color + '" onmouseenter="showTooltip(event, \'' + esc(formatBucketLabel(p)) + ': ' + (isDuration ? p.val.toFixed(2)+'s' : n(p.val)) + ' (' + s.label + ')\')" onmouseleave="hideTooltip()"/>';
     });
   });
 
   var step = Math.max(1, Math.ceil(data.length / Math.max(2, Math.floor(cW / 105))));
   for (var i = 0; i < data.length; i += step) {
     var x = pL + cW * (i / (data.length - 1 || 1));
-    var lbl = formatHourBucketVN(data[i].hour);
+    var lbl = formatBucketLabel(data[i]);
     svg += '<text x="' + x + '" y="' + (H - 6) + '" fill="var(--text-muted)" font-size="9" text-anchor="middle" font-family="var(--mono)">' + esc(lbl) + '</text>';
   }
 
