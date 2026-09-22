@@ -2027,6 +2027,20 @@ function esc(str) {
   return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 }
 
+// maskKey hides a client API key before it reaches the DOM: first 6 characters,
+// six asterisks, last 2. A working credential must never be rendered in full.
+//   sk-a1b2c3d4e5f60718-9abcdef0  ->  sk-a1b******f0
+// Values too short to mask meaningfully keep only their first character, and an
+// already-masked value is returned untouched so a second pass cannot double it.
+function maskKey(key) {
+  if (key === null || key === undefined) return "";
+  var s = String(key);
+  if (!s) return "";
+  if (s.indexOf("******") >= 0) return s;
+  if (s.length <= 8) return s.slice(0, 1) + "******";
+  return s.slice(0, 6) + "******" + s.slice(-2);
+}
+
 // providerLabel renders the operator-facing Provider cell. The backend already
 // computes provider_label (upstream base URL without its scheme, or the
 // upstream account for OAuth providers); this mirrors it as a fallback for
@@ -2731,7 +2745,7 @@ function renderOverview(d) {
 function renderRequestsModels(d) {
   renderHorizontalBar("rm-chart-provider", d.by_provider || [], "#6366f1");
   renderHorizontalBar("rm-chart-router", d.by_alias || [], "#a855f7");
-  renderHorizontalBar("rm-chart-keys", (d.by_api_key || []).slice(0, 8), "#06b6d4");
+  renderApiKeyChart("rm-chart-keys", (d.by_api_key || []).slice(0, 8), "#06b6d4");
 
   renderModelPerfTable(d.by_model || []);
 
@@ -2927,7 +2941,7 @@ function loadRequestsPage(delta) {
         '<td><strong>' + esc(r.alias || 'Direct / No Router') + '</strong></td>' +
         '<td>' + esc(r.model) + '</td>' +
         '<td title="' + esc(r.provider || '') + '">' + esc(providerLabel(r)) + '</td>' +
-        '<td><code>' + esc(r.api_key) + '</code></td>' +
+        '<td><code title="' + esc(maskKey(r.api_key)) + '">' + esc(maskKey(r.api_key)) + '</code></td>' +
         '<td><span class="badge">' + esc(r.reasoning_effort || 'Not Specified') + '</span></td>' +
         '<td class="num">' + formatDurationS(r.latency_ms / 1000) + '</td>' +
         '<td class="num">' + nTok(r.tokens.total_tokens) + '</td>' +
@@ -2954,7 +2968,7 @@ function showDetail(r) {
     '<div class="detail-row"><div class="detail-k">Provider</div><div class="detail-v">' + esc(providerLabel(r)) + '</div></div>' +
     (r.base_url ? '<div class="detail-row"><div class="detail-k">Base URL</div><div class="detail-v"><code>' + esc(r.base_url) + '</code></div></div>' : '') +
     (r.auth_id ? '<div class="detail-row"><div class="detail-k">Tài khoản đích</div><div class="detail-v"><code>' + esc(r.auth_id) + '</code></div></div>' : '') +
-    '<div class="detail-row"><div class="detail-k">API Key</div><div class="detail-v"><code>' + esc(r.api_key) + '</code></div></div>' +
+    '<div class="detail-row"><div class="detail-k">API Key</div><div class="detail-v"><code>' + esc(maskKey(r.api_key)) + '</code></div></div>' +
     '<div class="detail-row"><div class="detail-k">Đường đi (Attribution)</div><div class="detail-v"><span class="badge">' + esc(r.source || 'unattributed') + '</span></div></div>' +
     '<div class="detail-row"><div class="detail-k">Mức suy nghĩ / Tier</div><div class="detail-v">' + esc(r.reasoning_effort || 'Not Specified') + ' · Tier: ' + esc(r.service_tier || 'auto') + '</div></div>' +
     '<div class="detail-row"><div class="detail-k">Trình thực thi</div><div class="detail-v">' + esc(r.executor_type || 'OpenAICompat') + '</div></div>' +
@@ -3105,6 +3119,32 @@ function renderTimelineArea(containerId, data, series) {
   box.innerHTML = svg;
 }
 
+// Client API Keys chart: labels are masked before rendering, so a working
+// credential never reaches the DOM. The value shown is only for recognition.
+function renderApiKeyChart(containerId, items, color) {
+  var box = document.getElementById(containerId);
+  if (!box) return;
+  if (!items || !items.length) {
+    box.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:190px;color:var(--text-muted)">Không có dữ liệu</div>';
+    return;
+  }
+  var max = items[0].calls || 1;
+  var html = '<div style="display:flex;flex-direction:column;gap:7px;padding:4px 0">';
+  items.slice(0, 8).forEach(function(it) {
+    var pct = ((it.calls / max) * 100).toFixed(1);
+    var label = maskKey(it.name);
+    html += '<div>' +
+      '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px">' +
+        '<span style="font-weight:600;font-family:var(--mono)" title="' + esc(label) + '">' + esc(label) + '</span>' +
+        '<span style="color:var(--text-muted);font-family:var(--mono)">' + n(it.calls) + '</span>' +
+      '</div>' +
+      '<div style="height:5px;background:var(--bg-subtle);border-radius:99px;overflow:hidden">' +
+        '<div style="width:' + pct + '%;height:100%;background:' + color + ';border-radius:99px"></div>' +
+      '</div></div>';
+  });
+  html += '</div>';
+  box.innerHTML = html;
+}
 function renderHorizontalBar(containerId, items, color) {
   var box = document.getElementById(containerId);
   if (!box) return;

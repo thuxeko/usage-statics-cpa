@@ -592,6 +592,11 @@ func (s *SQLiteStore) Summary(ctx context.Context, rng QueryRange, filter ...Pag
 	if err := s.fillCosts(ctx, rng, f, summary); err != nil {
 		return nil, err
 	}
+	// Breakdowns the router path always had: per-executor, per-effort,
+	// histograms, scatter and slowest requests.
+	if err := s.fillDistributions(ctx, rng, f, summary); err != nil {
+		return nil, err
+	}
 	// Derived counters, mirroring what the router path reports so the two
 	// sources agree on the same payload shape.
 	summary.Totals.Success = summary.Totals.Calls - summary.Totals.Failed
@@ -812,6 +817,181 @@ func (s *SQLiteStore) fillByHour(ctx context.Context, rng QueryRange, filter Pag
 	t.P90TTFTS = round2(percentile(allTTFTS, 0.9))
 	t.HungCalls = hungCalls
 	t.CacheHitCalls = cacheHitCalls
+	return nil
+}
+
+// latencyBucketLabel maps a latency in seconds to the bucket label the
+// dashboard expects, mirroring the router path's thresholds exactly.
+func latencyBucketLabel(latS float64) string {
+	switch {
+	case latS < 1:
+		return "< 1s"
+	case latS < 3:
+		return "1 - 3s"
+	case latS < 5:
+		return "3 - 5s"
+	case latS < 10:
+		return "5 - 10s"
+	case latS < 30:
+		return "10 - 30s"
+	case latS < 60:
+		return "30 - 60s"
+	case latS < 300:
+		return "1 - 5m"
+	case latS < 1800:
+		return "5 - 30m"
+	default:
+		return "> 30m"
+	}
+}
+
+// tokenBucketLabel maps a context size to its bucket label. The router path
+// buckets on input tokens, so the plugin path does the same and the two
+// sources stay comparable.
+func tokenBucketLabel(inTok int64) string {
+	switch {
+	case inTok < 1000:
+		return "< 1k"
+	case inTok < 10000:
+		return "1k - 10k"
+	case inTok < 50000:
+		return "10k - 50k"
+	case inTok < 100000:
+		return "50k - 100k"
+	case inTok < 200000:
+		return "100k - 200k"
+	case inTok < 400000:
+		return "200k - 400k"
+	default:
+		return "> 400k"
+	}
+}
+
+var (
+	latencyBucketOrder = []string{"< 1s", "1 - 3s", "3 - 5s", "5 - 10s", "10 - 30s", "30 - 60s", "1 - 5m", "5 - 30m", "> 30m"}
+	tokenBucketOrder   = []string{"< 1k", "1k - 10k", "10k - 50k", "50k - 100k", "100k - 200k", "200k - 400k", "> 400k"}
+)
+
+// fillDistributions fills the breakdowns that only ever existed on the router
+// path: per-executor rows, per-reasoning-effort rows, the latency and context
+// histograms, the latency/TTFT scatter and the slowest-request list.
+//
+// It is deliberately a SEPARATE scan from fillByHour rather than more work
+// inside it: the summary runs on every dashboard refresh, and mixing two
+// concerns in one loop makes either one harder to change safely. The scan
+// returns only aggregate counters plus a bounded sample (150 scatter points,
+// 30 slowest rows), so the payload stays small no matter how wide the range.
+func (s *SQLiteStore) fillDistributions(ctx context.Context, rng QueryRange, filter PageFilter, summary *UsageSummary) error {
+	if s == nil || s.db == nil {
+		return nil
+	}
+	where, args := filterWhere(rng, filter, nil)
+	query := `SELECT id, timestamp, api_key, provider, model, alias, source,
+		auth_id, auth_index, auth_type, base_url, executor_type,
+		reasoning_effort, service_tier, latency_ms, ttft_ms,
+		input_tokens, output_tokens, reasoning_tokens, cached_tokens,
+		cache_read_tokens, cache_creation_tokens, total_tokens,
+		failed, failure_status_code, failure_body
+		FROM usage_records` + where + `
+		ORDER BY timestamp DESC, id DESC`
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("usage sqlite distribution query: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	efforts := map[string]*enhancedGroupAcc{}
+	executors := map[string]*enhancedGroupAcc{}
+	latBuckets := map[string]int64{}
+	tokBuckets := map[string]int64{}
+	var scatterPoints []ScatterPoint
+	var slowest []RequestDetail
+
+	for rows.Next() {
+		var timestampText string
+		var apiKey string
+		var failedInt int
+		d := RequestDetail{}
+		if err := rows.Scan(
+			&d.ID, &timestampText, &apiKey, &d.Provider, &d.Model, &d.Alias, &d.Source,
+			&d.AuthID, &d.AuthIndex, &d.AuthType, &d.BaseURL, &d.ExecutorType,
+			&d.ReasoningEffort, &d.ServiceTier, &d.LatencyMs, &d.TTFTMs,
+			&d.Tokens.InputTokens, &d.Tokens.OutputTokens, &d.Tokens.ReasoningTokens,
+			&d.Tokens.CachedTokens, &d.Tokens.CacheReadTokens, &d.Tokens.CacheCreationTokens,
+			&d.Tokens.TotalTokens, &failedInt, &d.FailureStatusCode, &d.FailureBody,
+		); err != nil {
+			return fmt.Errorf("usage sqlite distribution scan: %w", err)
+		}
+		parsed, err := time.Parse(time.RFC3339Nano, timestampText)
+		if err != nil {
+			return fmt.Errorf("usage sqlite distribution parse timestamp: %w", err)
+		}
+		d.Timestamp = parsed.UTC()
+		d.LatencyMs = nonNegative(d.LatencyMs)
+		d.TTFTMs = nonNegative(d.TTFTMs)
+		d.Failed = failedInt != 0
+		d.ProviderLabel = providerLabel(d)
+
+		latS := float64(d.LatencyMs) / 1000
+		ttftS := float64(d.TTFTMs) / 1000
+		cached := d.Tokens.CachedTokens
+		if cached == 0 && d.Tokens.CacheReadTokens > 0 {
+			cached = d.Tokens.CacheReadTokens
+		}
+		modelName := firstNonEmpty(d.Model, "unknown")
+
+		// Per reasoning effort.
+		effortName := firstNonEmpty(d.ReasoningEffort, "Not Specified")
+		enhancedAccFor(efforts, effortName).add(d.Failed, d.LatencyMs, d.TTFTMs, latS, ttftS,
+			d.Tokens.InputTokens, d.Tokens.OutputTokens, d.Tokens.ReasoningTokens,
+			cached, d.Tokens.TotalTokens, d.FailureStatusCode)
+
+		// Per executor.
+		executorName := firstNonEmpty(d.ExecutorType, "unknown")
+		enhancedAccFor(executors, executorName).add(d.Failed, d.LatencyMs, d.TTFTMs, latS, ttftS,
+			d.Tokens.InputTokens, d.Tokens.OutputTokens, d.Tokens.ReasoningTokens,
+			cached, d.Tokens.TotalTokens, d.FailureStatusCode)
+
+		latBuckets[latencyBucketLabel(latS)]++
+		tokBuckets[tokenBucketLabel(d.Tokens.InputTokens)]++
+
+		if len(scatterPoints) < 150 && (latS > 0 || ttftS > 0) {
+			scatterPoints = append(scatterPoints, ScatterPoint{
+				LatencyS: round2(latS),
+				TTFTS:    round2(ttftS),
+				Model:    modelName,
+				Provider: d.Provider,
+				Failed:   d.Failed,
+			})
+		}
+
+		// Keep the 30 slowest, inserting in order so the list never grows
+		// unbounded for a wide range.
+		if len(slowest) < 30 || d.LatencyMs > slowest[len(slowest)-1].LatencyMs {
+			slowest = append(slowest, d)
+			sort.Slice(slowest, func(i, j int) bool {
+				return slowest[i].LatencyMs > slowest[j].LatencyMs
+			})
+			if len(slowest) > 30 {
+				slowest = slowest[:30]
+			}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("usage sqlite distribution rows: %w", err)
+	}
+
+	summary.ByEffort = enhancedToStats(efforts, nil)
+	summary.ByExecutor = enhancedToStats(executors, nil)
+	for _, b := range latencyBucketOrder {
+		summary.LatencyDistribution = append(summary.LatencyDistribution, DistributionBucket{Label: b, Calls: latBuckets[b]})
+	}
+	for _, b := range tokenBucketOrder {
+		summary.TokenDistribution = append(summary.TokenDistribution, DistributionBucket{Label: b, Calls: tokBuckets[b]})
+		summary.ContextHistogram = append(summary.ContextHistogram, DistributionBucket{Label: b, Calls: tokBuckets[b]})
+	}
+	summary.ScatterPoints = scatterPoints
+	summary.SlowestRequests = slowest
 	return nil
 }
 

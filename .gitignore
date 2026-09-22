@@ -12,3 +12,6 @@ usage.db-*
 *.sqlite-*
 .backups/
 live-usage-copy.db
+
+# Test artifact: mount point for the router config during tests
+config.yaml

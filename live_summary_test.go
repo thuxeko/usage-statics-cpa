@@ -169,4 +169,74 @@ func TestLiveSummaryHasTokenTrendAndCost(t *testing.T) {
 	if summary.Totals.ActiveModels != int64(len(summary.ByModel)) {
 		t.Errorf("active_models %d != len(by_model) %d", summary.Totals.ActiveModels, len(summary.ByModel))
 	}
+
+	// --- Tab "Token & Cache": the two cards the user reported as empty -----
+	//
+	// "Phân bố Kích thước Context" reads token_distribution, "Mức suy nghĩ
+	// (Reasoning) × Hiệu năng" reads by_effort. Both had data in usage.db but
+	// were never filled on the plugin path.
+	var distTotal int64
+	for _, b := range summary.TokenDistribution {
+		distTotal += b.Calls
+	}
+	t.Logf("context distribution: %d buckets, %d calls total", len(summary.TokenDistribution), distTotal)
+	if len(summary.TokenDistribution) == 0 {
+		t.Errorf("token_distribution is empty; 'Phân bố Kích thước Context' renders nothing")
+	}
+	if distTotal != summary.Totals.Calls {
+		t.Errorf("context distribution covers %d calls but the range has %d", distTotal, summary.Totals.Calls)
+	}
+	for _, b := range summary.TokenDistribution {
+		if b.Calls > 0 {
+			t.Logf("  context %-12s %d", b.Label, b.Calls)
+		}
+	}
+
+	t.Logf("by_effort: %d rows", len(summary.ByEffort))
+	if len(summary.ByEffort) == 0 {
+		t.Errorf("by_effort is empty; 'Mức suy nghĩ (Reasoning) × Hiệu năng' renders nothing")
+	}
+	var effortCalls int64
+	for _, e := range summary.ByEffort {
+		effortCalls += e.Calls
+		t.Logf("  effort %-14s calls=%d p50=%.1fs in=%d out=%d reasoning=%d",
+			e.Name, e.Calls, e.P50LatencyS, e.InputTokens, e.OutputTokens, e.ReasoningTokens)
+	}
+	if effortCalls != summary.Totals.Calls {
+		t.Errorf("by_effort covers %d calls but the range has %d", effortCalls, summary.Totals.Calls)
+	}
+	// The card shows p50/p90 per effort, so they must be populated.
+	withP50 := 0
+	for _, e := range summary.ByEffort {
+		if e.P50LatencyS > 0 {
+			withP50++
+		}
+	}
+	if withP50 == 0 {
+		t.Errorf("no by_effort row carries a p50 latency; the card's latency columns stay empty")
+	}
+
+	// --- Same omission class on the Performance tab ------------------------
+	t.Logf("by_executor: %d rows, latency_distribution: %d buckets, scatter: %d points, slowest: %d rows",
+		len(summary.ByExecutor), len(summary.LatencyDistribution), len(summary.ScatterPoints), len(summary.SlowestRequests))
+	if len(summary.ByExecutor) == 0 {
+		t.Errorf("by_executor is empty; the executor table renders nothing")
+	}
+	if len(summary.LatencyDistribution) == 0 {
+		t.Errorf("latency_distribution is empty; the latency histogram renders nothing")
+	}
+	if len(summary.ScatterPoints) == 0 {
+		t.Errorf("scatter_points is empty; the latency/TTFT scatter renders nothing")
+	}
+	if len(summary.SlowestRequests) == 0 {
+		t.Errorf("slowest_requests is empty; the slowest table renders nothing")
+	}
+	if len(summary.SlowestRequests) > 1 {
+		for i := 1; i < len(summary.SlowestRequests); i++ {
+			if summary.SlowestRequests[i-1].LatencyMs < summary.SlowestRequests[i].LatencyMs {
+				t.Errorf("slowest_requests is not sorted by latency desc at %d", i)
+				break
+			}
+		}
+	}
 }
