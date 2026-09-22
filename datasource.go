@@ -73,6 +73,44 @@ func summaryForSource(req managementRequest) ([]byte, error) {
 	return okEnvelope(jsonManagementResponse(200, summary))
 }
 
+// latestForSource returns the N most recent request records for the realtime
+// panel. Parses ?limit= (default 15, capped 200); no time filter — this
+// endpoint is intentionally cheap and window-independent.
+//
+// The plugin's own store is the primary source now: it receives every usage
+// record CPA emits and carries base_url + auth identity, so it does not
+// depend on model-router being installed. The router DB is only consulted
+// when explicitly requested (?source=router).
+func latestForSource(req managementRequest) ([]byte, error) {
+	n := 15
+	if raw := strings.TrimSpace(firstValue(req.Query, "limit")); raw != "" {
+		if v, err := strconv.Atoi(raw); err == nil {
+			n = v
+		}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), insertTimeout)
+	defer cancel()
+
+	store := currentStore()
+	if store != nil {
+		rows, err := store.StoreLatest(ctx, n)
+		if err == nil {
+			return okEnvelope(jsonManagementResponse(200, UsagePage{Total: int64(len(rows)), Limit: n, Offset: 0, Source: "plugin", Rows: rows}))
+		}
+	}
+
+	source, rs := resolveSource(req.Query)
+	if source == "router" && rs != nil {
+		defer rs.close()
+		rows, err := rs.RouterLatest(ctx, n)
+		if err != nil {
+			return okEnvelope(jsonManagementResponse(500, map[string]string{"error": "router db read failed"}))
+		}
+		return okEnvelope(jsonManagementResponse(200, UsagePage{Total: int64(len(rows)), Limit: n, Offset: 0, Source: "router", Rows: rows}))
+	}
+	return okEnvelope(jsonManagementResponse(200, UsagePage{Total: 0, Limit: n, Offset: 0, Source: "plugin", Rows: []RequestDetail{}}))
+}
+
 func pageForSource(req managementRequest) ([]byte, error) {
 	rng, filter := parsePageFilter(req.Query)
 	ctx, cancel := context.WithTimeout(context.Background(), insertTimeout)
@@ -400,7 +438,10 @@ func readCPAConfigProviders() []cpaConfigProvider {
 }
 
 // providersGet returns the list of ACTIVE (non-disabled) configured providers with their Base URLs and API Keys.
+// It also refreshes the cached provider->base-url index used by providerLabel,
+// so editing config.yaml and reloading providers is enough to update labels.
 func providersGet(req managementRequest) ([]byte, error) {
+	invalidateBaseURLCache()
 	all := readCPAConfigProviders()
 	active := make([]cpaConfigProvider, 0, len(all))
 	for _, p := range all {

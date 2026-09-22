@@ -10,3 +10,5 @@ usage.db
 usage.db-*
 *.sqlite
 *.sqlite-*
+.backups/
+live-usage-copy.db

@@ -815,6 +815,13 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   <section class="col-6 panel" id="ov-share-panel"><div class="panel-header overview-toolbar"><div><div class="panel-title">Model usage share</div><div class="panel-desc">Tỷ trọng sử dụng của từng model</div></div><div class="ov-share-controls" role="group" aria-label="Chọn cách tính tỷ trọng"><button class="btn-text" data-share-metric="requests" aria-pressed="true" onclick="setOverviewShareMetric('requests')">Lượt gọi</button><button class="btn-text" data-share-metric="tokens" aria-pressed="false" onclick="setOverviewShareMetric('tokens')">Token</button><button class="btn-text" data-share-metric="cost" aria-pressed="false" onclick="setOverviewShareMetric('cost')">Chi phí</button></div></div><div class="ov-donut-layout"><svg id="ov-share-donut" viewBox="0 0 280 280" role="img" aria-label="Tỷ trọng model"></svg><div id="ov-share-legend" class="ov-donut-legend"></div></div></section>
     </div>
     <div class="section-grid overview-sections">
+  <section class="col-12 panel" id="ov-realtime-panel">
+    <div class="panel-header overview-toolbar">
+      <div><div class="panel-title">Requests (Realtime Log)</div><div class="panel-desc">15 request mới nhất · tự làm mới 15s</div></div>
+      <button class="btn-text" onclick="switchTab('requests_log')">Mở Tra cứu Requests →</button>
+    </div>
+    <div class="table-wrap"><table class="clean-table" id="ov-realtime-table"><thead><tr><th>Thời gian</th><th>Router Alias</th><th>Model</th><th>Provider</th><th class="num">In</th><th class="num">Out</th><th class="num">Cache</th><th>Trạng thái</th></tr></thead><tbody id="ov-realtime-tbody"><tr><td colspan="8" class="empty">Đang tải…</td></tr></tbody></table></div>
+  </section>
   <section class="col-12 panel" id="ov-model-panel">
     <div class="panel-header overview-toolbar"><div><div class="panel-title">Mức sử dụng từng model</div><div class="panel-desc">Bấm tiêu đề cột để sắp xếp · Giữ nguyên tên model hệ thống</div></div><details id="ov-columns"><summary class="btn-text">Chọn cột</summary><div id="ov-column-options" class="overview-columns"></div></details></div>
     <div class="table-wrap"><table id="ov-model-table" class="clean-table"><thead></thead><tbody></tbody></table></div>
@@ -2020,6 +2027,29 @@ function esc(str) {
   return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 }
 
+// providerLabel renders the operator-facing Provider cell. The backend already
+// computes provider_label (config base-url host, or the upstream account for
+// OAuth providers); this mirrors it as a fallback for older payloads so the
+// column never regresses to a bare "openai-compatible-xxx" slug.
+function providerLabel(r) {
+  if (!r) return "";
+  if (r.provider_label) return r.provider_label;
+  var provider = String(r.provider || "").trim();
+  if (!provider) return "";
+  var short = provider.indexOf("openai-compatible-") === 0
+    ? provider.slice("openai-compatible-".length)
+    : provider;
+  var host = "";
+  var base = String(r.base_url || "").trim();
+  if (base) {
+    try {
+      host = new URL(base.indexOf("://") >= 0 ? base : "http://" + base).host;
+    } catch (ignore) { host = ""; }
+  }
+  if (!host) return provider;
+  return short ? (short + " · " + host) : host;
+}
+
 // ---- state & filter management ---------------------------------------------
 // Selective CAP dashboard presentation adaptation; see THIRD_PARTY_NOTICES.md.
 var overviewPrefs = {tokenMode:'auto',pageSize:10,hidden:[]};
@@ -2591,12 +2621,57 @@ function switchTab(tabId) {
   else renderAllViews();
 }
 
+// ---- Realtime Log (Overview) ------------------------------------------------
+// 15 latest requests, polled on its own 15s timer (independent of summary
+// auto-refresh), pausing when the tab is hidden. Uses the cheap /usage/latest
+// index-walk endpoint, NOT the full /usage/requests page scan.
+var realtimeTimer = null;
+function renderRealtimeLog() {
+  api("/usage/latest?limit=15").then(function(page) {
+    var rows = page.rows || [];
+    var tbody = document.getElementById("ov-realtime-tbody");
+    if (!tbody) return;
+    if (rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" class="empty">Chưa có request qua router gần đây.</td></tr>';
+      return;
+    }
+    var html = "";
+    rows.forEach(function(r) {
+      var badge = r.failed
+        ? '<span class="badge badge-bad">HTTP ' + esc(r.failure_status_code || 500) + '</span>'
+        : '<span class="badge badge-ok">OK</span>';
+      var tk = r.tokens || {};
+      var inTok = tk.input_tokens || 0;
+      var outTok = tk.output_tokens || 0;
+      var cacheTok = tk.cached_tokens || 0;
+      html += '<tr>' +
+        '<td>' + formatTimeShortVN(r.timestamp) + '</td>' +
+        '<td><strong>' + esc(r.alias || "Direct / No Router") + '</strong></td>' +
+        '<td>' + esc(r.model) + '</td>' +
+        '<td title="' + esc(r.provider || "") + '">' + esc(providerLabel(r)) + '</td>' +
+        '<td class="num">' + nTok(inTok) + '</td>' +
+        '<td class="num">' + nTok(outTok) + '</td>' +
+        '<td class="num">' + nTok(cacheTok) + '</td>' +
+        '<td>' + badge + '</td>' +
+      '</tr>';
+    });
+    tbody.innerHTML = html;
+  }).catch(function(err) { /* keep last data on transient failure */ });
+}
+function startRealtimeLog() {
+  if (realtimeTimer) { clearInterval(realtimeTimer); realtimeTimer = null; }
+  renderRealtimeLog();
+  realtimeTimer = setInterval(function() {
+    if (document.hidden) return;
+    renderRealtimeLog();
+  }, 15000);
+}
+
 function refreshData() {
   var requestSequence = (state.summarySequence || 0) + 1;
   state.summarySequence = requestSequence;
   document.getElementById("summary-error").textContent="Đang cập nhật số liệu…";
-  var url = "/usage/summary?source=router" + buildFilterQueryParams();
-
+  var url = "/usage/summary?source=plugin" + buildFilterQueryParams();
   api(url).then(function(data) {
     if (requestSequence !== state.summarySequence) return;
     document.getElementById("summary-error").textContent="";
@@ -2745,7 +2820,7 @@ function renderPerformance(d) {
       '<td>' + formatTimeShortVN(r.timestamp) + '</td>' +
       '<td><strong>' + esc(r.alias || 'Direct / No Router') + '</strong></td>' +
       '<td>' + esc(r.model) + '</td>' +
-      '<td>' + esc(r.provider) + '</td>' +
+      '<td title="' + esc(r.provider || '') + '">' + esc(providerLabel(r)) + '</td>' +
       '<td class="num" style="color:var(--bad);font-weight:700">' + formatDurationS(r.latency_ms / 1000) + '</td>' +
       '<td class="num">' + formatDurationS(r.ttft_ms / 1000) + '</td>' +
       '<td class="num">' + nTok(r.tokens.total_tokens) + '</td>' +
@@ -2835,7 +2910,7 @@ function loadRequestsPage(delta) {
   else if (delta === 0) state.reqOffset = 0;
   else if (delta === -1) state.reqOffset = Math.max(0, state.reqOffset - state.reqLimit);
 
-  var url = "/usage/requests?source=router&limit=" + state.reqLimit + "&offset=" + state.reqOffset + buildFilterQueryParams();
+  var url = "/usage/requests?source=plugin&limit=" + state.reqLimit + "&offset=" + state.reqOffset + buildFilterQueryParams();
   if (state.reqStatus) {
     url += "&result=" + encodeURIComponent(state.reqStatus);
   }
@@ -2850,7 +2925,7 @@ function loadRequestsPage(delta) {
         '<td>' + formatTimeShortVN(r.timestamp) + '</td>' +
         '<td><strong>' + esc(r.alias || 'Direct / No Router') + '</strong></td>' +
         '<td>' + esc(r.model) + '</td>' +
-        '<td>' + esc(r.provider) + '</td>' +
+        '<td title="' + esc(r.provider || '') + '">' + esc(providerLabel(r)) + '</td>' +
         '<td><code>' + esc(r.api_key) + '</code></td>' +
         '<td><span class="badge">' + esc(r.reasoning_effort || 'Not Specified') + '</span></td>' +
         '<td class="num">' + formatDurationS(r.latency_ms / 1000) + '</td>' +
@@ -2875,7 +2950,9 @@ function showDetail(r) {
     '<div class="detail-row"><div class="detail-k">Sequence ID</div><div class="detail-v">#' + (r.sequence || r.id) + '</div></div>' +
     '<div class="detail-row"><div class="detail-k">Router Alias</div><div class="detail-v"><strong>' + esc(r.alias || 'Direct / No Router') + '</strong></div></div>' +
     '<div class="detail-row"><div class="detail-k">Model thật</div><div class="detail-v">' + esc(r.model) + '</div></div>' +
-    '<div class="detail-row"><div class="detail-k">Provider</div><div class="detail-v">' + esc(r.provider) + '</div></div>' +
+    '<div class="detail-row"><div class="detail-k">Provider</div><div class="detail-v">' + esc(providerLabel(r)) + '</div></div>' +
+    (r.base_url ? '<div class="detail-row"><div class="detail-k">Base URL</div><div class="detail-v"><code>' + esc(r.base_url) + '</code></div></div>' : '') +
+    (r.auth_id ? '<div class="detail-row"><div class="detail-k">Tài khoản đích</div><div class="detail-v"><code>' + esc(r.auth_id) + '</code></div></div>' : '') +
     '<div class="detail-row"><div class="detail-k">API Key</div><div class="detail-v"><code>' + esc(r.api_key) + '</code></div></div>' +
     '<div class="detail-row"><div class="detail-k">Đường đi (Attribution)</div><div class="detail-v"><span class="badge">' + esc(r.source || 'unattributed') + '</span></div></div>' +
     '<div class="detail-row"><div class="detail-k">Mức suy nghĩ / Tier</div><div class="detail-v">' + esc(r.reasoning_effort || 'Not Specified') + ' · Tier: ' + esc(r.service_tier || 'auto') + '</div></div>' +
@@ -3125,6 +3202,7 @@ function hideTooltip() {
 document.addEventListener("DOMContentLoaded", function() {
   observeHostTheme();
   initAutoRefresh();
+  startRealtimeLog();
   refreshData();
 });
 </script>

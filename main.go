@@ -32,6 +32,11 @@ const (
 	// SQL-aggregated dashboard summary and a paginated request listing.
 	managementSummaryPath  = "/plugins/" + pluginID + "/usage/summary"
 	managementRequestsPath = "/plugins/" + pluginID + "/usage/requests"
+	// managementLatestPath returns the N most recent request records (realtime
+	// panel) by walking the DB index backwards, so it does NOT scan the whole
+	// selected window like /usage/requests does — cheap enough to poll for the
+	// on-dashboard "Realtime Log" block.
+	managementLatestPath = "/plugins/" + pluginID + "/usage/latest"
 	// managementErrorLogPath serves the CPA request-error log excerpt for one
 	// failed request (matched by timestamp + status code).
 	managementErrorLogPath = "/plugins/" + pluginID + "/error-log"
@@ -250,6 +255,7 @@ func managementRegistration() managementRegistrationPayload {
 			{Method: "GET", Path: managementUsagePath, Description: "Query persisted usage grouped by api key and model."},
 			{Method: "GET", Path: managementSummaryPath, Description: "Dashboard aggregate: totals, per-hour, per-model, per-alias, per-provider, per-api-key."},
 			{Method: "GET", Path: managementRequestsPath, Description: "Paginated request-level usage listing with filters."},
+			{Method: "GET", Path: managementLatestPath, Description: "N most recent requests (realtime panel, index-walk, no full scan)."},
 			{Method: "GET", Path: managementErrorLogPath, Description: "CPA request-error log excerpt for a failed request (ts + status match)."},
 			{Method: "GET", Path: managementPayloadPath, Description: "Captured chat prompt/response preview for requests."},
 			{Method: "GET", Path: managementProvidersPath, Description: "Known providers and models discovery for testing tools."},
@@ -288,6 +294,7 @@ type usageRecord struct {
 	AuthIndex       string       `json:"AuthIndex"`
 	AuthType        string       `json:"AuthType"`
 	Source          string       `json:"Source"`
+	BaseURL         string       `json:"BaseURL"`
 	ReasoningEffort string       `json:"ReasoningEffort"`
 	ServiceTier     string       `json:"ServiceTier"`
 	RequestedAt     time.Time    `json:"RequestedAt"`
@@ -351,6 +358,7 @@ func toRecord(rec usageRecord) Record {
 		AuthIndex:       strings.TrimSpace(rec.AuthIndex),
 		AuthType:        strings.TrimSpace(rec.AuthType),
 		ExecutorType:    strings.TrimSpace(rec.ExecutorType),
+		BaseURL:         strings.TrimSpace(rec.BaseURL),
 		ReasoningEffort: strings.TrimSpace(rec.ReasoningEffort),
 		ServiceTier:     strings.TrimSpace(rec.ServiceTier),
 		LatencyMs:       nsToMs(rec.Latency),
@@ -445,6 +453,11 @@ func handleManagement(request []byte) ([]byte, error) {
 			return okEnvelope(jsonManagementResponse(405, map[string]string{"error": "method not allowed"}))
 		}
 		return pageForSource(req)
+	case path == strings.TrimRight(managementLatestPath, "/"):
+		if !strings.EqualFold(strings.TrimSpace(req.Method), "GET") {
+			return okEnvelope(jsonManagementResponse(405, map[string]string{"error": "method not allowed"}))
+		}
+		return latestForSource(req)
 	case path == strings.TrimRight(managementErrorLogPath, "/"):
 		if !strings.EqualFold(strings.TrimSpace(req.Method), "GET") {
 			return okEnvelope(jsonManagementResponse(405, map[string]string{"error": "method not allowed"}))

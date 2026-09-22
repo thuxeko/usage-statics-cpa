@@ -28,6 +28,7 @@ type Record struct {
 	AuthIndex         string
 	AuthType          string
 	ExecutorType      string
+	BaseURL           string
 	ReasoningEffort   string
 	ServiceTier       string
 	LatencyMs         int64
@@ -53,6 +54,8 @@ type RequestDetail struct {
 	AuthIndex         string     `json:"auth_index"`
 	AuthType          string     `json:"auth_type,omitempty"`
 	ExecutorType      string     `json:"executor_type,omitempty"`
+	BaseURL           string     `json:"base_url,omitempty"`
+	ProviderLabel     string     `json:"provider_label,omitempty"`
 	ReasoningEffort   string     `json:"reasoning_effort"`
 	ServiceTier       string     `json:"service_tier"`
 	LatencyMs         int64      `json:"latency_ms"`

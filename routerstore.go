@@ -280,6 +280,43 @@ func (r *routerStore) scanRouterRows(ctx context.Context, start, end *time.Time,
 	return rows.Err()
 }
 
+// RouterLatest returns the N most recent request records by walking the
+// (requested_at_ns, sequence) index BACKWARDS, decoding only the last N rows.
+// This is the cheap realtime path for the dashboard's Realtime Log panel —
+// unlike RouterPage (which scans + decodes the whole window before slicing) it
+// is O(N) and independent of the selected time range.
+func (r *routerStore) RouterLatest(ctx context.Context, n int) ([]RequestDetail, error) {
+	if n <= 0 {
+		n = 15
+	}
+	if n > 200 {
+		n = 200
+	}
+	db, err := r.connect()
+	if err != nil {
+		return nil, err
+	}
+	rows, err := db.QueryContext(ctx,
+		`SELECT payload FROM requests ORDER BY requested_at_ns DESC, sequence DESC LIMIT ?`, n)
+	if err != nil {
+		return nil, fmt.Errorf("router db query: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := make([]RequestDetail, 0, n)
+	for rows.Next() {
+		var payload []byte
+		if err := rows.Scan(&payload); err != nil {
+			return nil, fmt.Errorf("router db scan: %w", err)
+		}
+		var rec routerRecord
+		if err := json.Unmarshal(payload, &rec); err != nil {
+			continue
+		}
+		out = append(out, routerToDetail(rec))
+	}
+	return out, rows.Err()
+}
+
 // matchRouterRecord checks if a router record passes the given PageFilter.
 func matchRouterRecord(rec routerRecord, filter PageFilter) bool {
 	if filter.Model != "" &&
