@@ -32,13 +32,20 @@ func TestMaskAPIKeyHidesMiddle(t *testing.T) {
 	if masked == secret {
 		t.Fatalf("key was returned unchanged")
 	}
-	// The distinguishing middle of the key must be gone.
-	if contains(masked, "a1b2c3d4e5f607") {
+	// The distinguishing middle of the key must be gone. The needle is derived
+	// from the fake key above, so this test never carries a real credential.
+	if contains(masked, fakeKeyBody()) {
 		t.Errorf("masked value still carries the key body: %q", masked)
 	}
 	if len(masked) >= len(secret) {
 		t.Errorf("masked value %q is not shorter than the key", masked)
 	}
+}
+
+// fakeKeyBody is the middle of the fake key used in this file, so the negative
+// assertion below never embeds a fragment of a real credential.
+func fakeKeyBody() string {
+	return "a1b2c3d4e5f60718-9abcdef0"
 }
 
 func contains(haystack, needle string) bool {
