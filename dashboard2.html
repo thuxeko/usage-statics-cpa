@@ -820,7 +820,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
       <div><div class="panel-title">Requests (Realtime Log)</div><div class="panel-desc">15 request mới nhất · tự làm mới 15s</div></div>
       <button class="btn-text" onclick="switchTab('requests_log')">Mở Tra cứu Requests →</button>
     </div>
-    <div class="table-wrap"><table class="clean-table" id="ov-realtime-table"><thead><tr><th>Thời gian</th><th>Router Alias</th><th>Model</th><th>Provider</th><th class="num">In</th><th class="num">Out</th><th class="num">Cache</th><th>Trạng thái</th></tr></thead><tbody id="ov-realtime-tbody"><tr><td colspan="8" class="empty">Đang tải…</td></tr></tbody></table></div>
+    <div class="table-wrap"><table class="clean-table" id="ov-realtime-table"><thead><tr><th>Thời gian</th><th>Model</th><th>Provider</th><th class="num">In</th><th class="num">Out</th><th class="num">Cache</th><th>Trạng thái</th></tr></thead><tbody id="ov-realtime-tbody"><tr><td colspan="7" class="empty">Đang tải…</td></tr></tbody></table></div>
   </section>
   <section class="col-12 panel" id="ov-model-panel">
     <div class="panel-header overview-toolbar"><div><div class="panel-title">Mức sử dụng từng model</div><div class="panel-desc">Bấm tiêu đề cột để sắp xếp · Giữ nguyên tên model hệ thống</div></div><details id="ov-columns"><summary class="btn-text">Chọn cột</summary><div id="ov-column-options" class="overview-columns"></div></details></div>
@@ -2634,7 +2634,7 @@ function renderRealtimeLog() {
     var tbody = document.getElementById("ov-realtime-tbody");
     if (!tbody) return;
     if (rows.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="8" class="empty">Chưa có request qua router gần đây.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" class="empty">Chưa có request gần đây.</td></tr>';
       return;
     }
     var html = "";
@@ -2648,7 +2648,6 @@ function renderRealtimeLog() {
       var cacheTok = tk.cached_tokens || 0;
       html += '<tr>' +
         '<td>' + formatTimeShortVN(r.timestamp) + '</td>' +
-        '<td><strong>' + esc(r.alias || "Direct / No Router") + '</strong></td>' +
         '<td>' + esc(r.model) + '</td>' +
         '<td title="' + esc(r.provider || "") + '">' + esc(providerLabel(r)) + '</td>' +
         '<td class="num">' + nTok(inTok) + '</td>' +

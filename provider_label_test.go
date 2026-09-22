@@ -9,9 +9,11 @@ func TestProviderLabel(t *testing.T) {
 		want   string
 	}{
 		{
-			name:   "openai-compat with config base-url -> short name + host",
-			detail: RequestDetail{Provider: "openai-compatible-ca2", BaseURL: "", AuthID: ""},
-			want:   "ca2", // no config readable in test env -> honest fallback to short name
+			name:   "openai-compat with no known endpoint falls back to short name",
+			detail: RequestDetail{Provider: "openai-compatible-no-such-provider", BaseURL: "", AuthID: ""},
+			// This provider has no entry in the router config, so there is no
+			// endpoint to show; the honest answer is the provider short name.
+			want: "no-such-provider",
 		},
 		{
 			name:   "antigravity oauth account wins",

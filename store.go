@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -587,6 +588,15 @@ func (s *SQLiteStore) Summary(ctx context.Context, rng QueryRange, filter ...Pag
 	if err := s.fillStatusCodes(ctx, rng, f, summary); err != nil {
 		return nil, err
 	}
+	// Costs are priced last: they annotate the per-model rows built above.
+	if err := s.fillCosts(ctx, rng, f, summary); err != nil {
+		return nil, err
+	}
+	// Derived counters, mirroring what the router path reports so the two
+	// sources agree on the same payload shape.
+	summary.Totals.Success = summary.Totals.Calls - summary.Totals.Failed
+	summary.Totals.ActiveModels = int64(len(summary.ByModel))
+	summary.Totals.ActiveKeys = int64(len(summary.ByAPIKey))
 	return summary, nil
 }
 
@@ -595,13 +605,15 @@ func (s *SQLiteStore) fillTotals(ctx context.Context, rng QueryRange, filter Pag
 	query := `SELECT COUNT(*), COALESCE(SUM(failed),0),
 		COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0),
 		COALESCE(SUM(reasoning_tokens),0), COALESCE(SUM(cached_tokens),0),
+		COALESCE(SUM(cache_creation_tokens),0),
 		COALESCE(SUM(total_tokens),0),
 		COALESCE(AVG(latency_ms),0), COALESCE(AVG(ttft_ms),0)
 		FROM usage_records` + where
 	row := s.db.QueryRowContext(ctx, query, args...)
 	t := &summary.Totals
 	return row.Scan(&t.Calls, &t.Failed, &t.InputTokens, &t.OutputTokens,
-		&t.ReasoningTokens, &t.CachedTokens, &t.TotalTokens, &t.AvgLatencyMs, &t.AvgTTFTMs)
+		&t.ReasoningTokens, &t.CachedTokens, &t.CacheCreationTokens, &t.TotalTokens,
+		&t.AvgLatencyMs, &t.AvgTTFTMs)
 }
 
 // groupKeySQL mirrors the Go groupingKey helper in SQL so api_key grouping
@@ -631,6 +643,8 @@ func (s *SQLiteStore) fillGrouped(ctx context.Context, rng QueryRange, filter Pa
 		}
 		query += `, COUNT(*), COALESCE(SUM(failed),0),
 			COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0),
+			COALESCE(SUM(reasoning_tokens),0), COALESCE(SUM(cached_tokens),0),
+			COALESCE(SUM(cache_creation_tokens),0),
 			COALESCE(SUM(total_tokens),0),
 			COALESCE(AVG(latency_ms),0), COALESCE(AVG(ttft_ms),0)
 			FROM usage_records` + where + `
@@ -648,7 +662,9 @@ func (s *SQLiteStore) fillGrouped(ctx context.Context, rng QueryRange, filter Pa
 			if d.hasSub {
 				scanArgs = append(scanArgs, &g.Sub)
 			}
-			scanArgs = append(scanArgs, &g.Calls, &g.Failed, &g.InputTokens, &g.OutputTokens, &g.TotalTokens, &g.AvgLatencyMs, &g.AvgTTFTMs)
+			scanArgs = append(scanArgs, &g.Calls, &g.Failed, &g.InputTokens, &g.OutputTokens,
+				&g.ReasoningTokens, &g.CachedTokens, &g.CacheCreationTokens, &g.TotalTokens,
+				&g.AvgLatencyMs, &g.AvgTTFTMs)
 			if err := rows.Scan(scanArgs...); err != nil {
 				rows.Close()
 				return fmt.Errorf("usage sqlite group scan: %w", err)
@@ -669,24 +685,273 @@ func (s *SQLiteStore) fillByHour(ctx context.Context, rng QueryRange, filter Pag
 	where, args := filterWhere(rng, filter, nil)
 	// Timestamps are stored as "YYYY-MM-DDTHH:MM:SS.nnnnnnnnnZ" (UTC), so the
 	// first 13 characters are the UTC hour bucket.
-	query := `SELECT substr(timestamp,1,13), COUNT(*), COALESCE(SUM(failed),0),
-		COALESCE(SUM(total_tokens),0)
+	//
+	// The latency percentiles cannot be computed in SQL, so the per-hour
+	// accumulator is built in Go from one ordered scan. Without the token
+	// columns here the trend chart had nothing to draw, which is why the
+	// plugin source used to render an empty "Token usage trend".
+	//
+	// The same scan also feeds the range-wide latency percentiles, hung-call
+	// and cache-hit counters that the Performance tab reads: those were only
+	// ever computed on the router path, so under source=plugin every one of
+	// them rendered as "–". One pass serves both, because a second full scan
+	// just to compute percentiles would double the cost of the summary.
+	query := `SELECT substr(timestamp,1,13), failed, latency_ms, ttft_ms,
+		input_tokens, output_tokens, total_tokens,
+		cached_tokens, cache_read_tokens
 		FROM usage_records` + where + `
-		GROUP BY substr(timestamp,1,13)
 		ORDER BY substr(timestamp,1,13) ASC`
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("usage sqlite hour query: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
+
+	type hourAcc struct {
+		calls    int64
+		failed   int64
+		inTok    int64
+		outTok   int64
+		totalTok int64
+		latS     []float64
+		ttftS    []float64
+	}
+	accs := map[string]*hourAcc{}
+	order := []string{}
+
+	var allLatS []float64
+	var allTTFTS []float64
+	var hungCalls, cacheHitCalls int64
+
 	for rows.Next() {
-		var h HourStat
-		if err := rows.Scan(&h.Hour, &h.Calls, &h.Failed, &h.TotalTokens); err != nil {
+		var (
+			hour                    string
+			failed                  int64
+			latMs, ttftMs           int64
+			inTok, outTok, totalTok int64
+			cachedTok, cacheReadTok int64
+		)
+		if err := rows.Scan(&hour, &failed, &latMs, &ttftMs, &inTok, &outTok, &totalTok,
+			&cachedTok, &cacheReadTok); err != nil {
 			return fmt.Errorf("usage sqlite hour scan: %w", err)
 		}
-		summary.ByHour = append(summary.ByHour, h)
+		acc, ok := accs[hour]
+		if !ok {
+			acc = &hourAcc{}
+			accs[hour] = acc
+			order = append(order, hour)
+		}
+		acc.calls++
+		if failed != 0 {
+			acc.failed++
+		}
+		acc.inTok += inTok
+		acc.outTok += outTok
+		acc.totalTok += totalTok
+		latS := float64(latMs) / 1000
+		ttftS := float64(ttftMs) / 1000
+		acc.latS = append(acc.latS, latS)
+		if ttftS > 0 {
+			acc.ttftS = append(acc.ttftS, ttftS)
+		}
+
+		allLatS = append(allLatS, latS)
+		if ttftS > 0 {
+			allTTFTS = append(allTTFTS, ttftS)
+		}
+		if latS > 300 {
+			hungCalls++
+		}
+		if cachedTok > 0 || cacheReadTok > 0 {
+			cacheHitCalls++
+		}
 	}
-	return rows.Err()
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("usage sqlite hour rows: %w", err)
+	}
+	sort.Strings(order)
+	for _, hour := range order {
+		acc := accs[hour]
+		errRate := float64(0)
+		if acc.calls > 0 {
+			errRate = round2(float64(acc.failed) / float64(acc.calls) * 100)
+		}
+		summary.ByHour = append(summary.ByHour, HourStat{
+			Hour:         hour,
+			Calls:        acc.calls,
+			Success:      acc.calls - acc.failed,
+			Failed:       acc.failed,
+			ErrorRate:    errRate,
+			InputTokens:  acc.inTok,
+			OutputTokens: acc.outTok,
+			TotalTokens:  acc.totalTok,
+			P50LatencyS:  round2(percentile(acc.latS, 0.5)),
+			P90LatencyS:  round2(percentile(acc.latS, 0.9)),
+			P95LatencyS:  round2(percentile(acc.latS, 0.95)),
+			P99LatencyS:  round2(percentile(acc.latS, 0.99)),
+		})
+	}
+
+	// Range-wide latency stats for the Performance tab. fillTotals ran first and
+	// already filled the counters and token sums; these are the fields it cannot
+	// express in SQL.
+	t := &summary.Totals
+	sort.Float64s(allLatS)
+	sort.Float64s(allTTFTS)
+	maxLat := float64(0)
+	if len(allLatS) > 0 {
+		maxLat = allLatS[len(allLatS)-1]
+	}
+	t.P50LatencyS = round2(percentile(allLatS, 0.5))
+	t.P75LatencyS = round2(percentile(allLatS, 0.75))
+	t.P90LatencyS = round2(percentile(allLatS, 0.9))
+	t.P95LatencyS = round2(percentile(allLatS, 0.95))
+	t.P99LatencyS = round2(percentile(allLatS, 0.99))
+	t.MaxLatencyS = round2(maxLat)
+	t.P50TTFTS = round2(percentile(allTTFTS, 0.5))
+	t.P90TTFTS = round2(percentile(allTTFTS, 0.9))
+	t.HungCalls = hungCalls
+	t.CacheHitCalls = cacheHitCalls
+	return nil
+}
+
+// effectivePriceBook returns the router price book merged with the manual
+// overrides stored in usage.db.
+//
+// Pricing normally lives on the router store, but the dashboard now reads its
+// own usage.db by default, so that path needs the same book. Any failure
+// degrades to a book carrying only the overrides: an estimate layer must never
+// take the usage dashboard down.
+func (s *SQLiteStore) effectivePriceBook(ctx context.Context) *priceBook {
+	book := emptyPriceBook()
+	if rs, err := newRouterStore(); err == nil {
+		defer rs.close()
+		book = rs.loadEffectivePriceBook(ctx)
+	}
+	if s != nil && s.db != nil {
+		if overrides, err := s.LoadPriceOverrides(ctx); err == nil {
+			book.overrides = overrides
+		}
+	}
+	return book
+}
+
+// fillCosts prices every record in range against the effective price book and
+// writes the result into the summary totals, the per-model rows and the pricing
+// metadata.
+//
+// A model without a price is counted as unpriced and never as free: the sum in
+// CostUSD only covers priced calls, and CostPartial/priced-call counts let the
+// dashboard say so out loud instead of showing a confident $0.
+func (s *SQLiteStore) fillCosts(ctx context.Context, rng QueryRange, filter PageFilter, summary *UsageSummary) error {
+	if s == nil || s.db == nil {
+		return nil
+	}
+	book := s.effectivePriceBook(ctx)
+
+	where, args := filterWhere(rng, filter, nil)
+	query := `SELECT model, alias, provider, executor_type,
+		input_tokens, output_tokens, reasoning_tokens,
+		cached_tokens, cache_read_tokens, cache_creation_tokens
+		FROM usage_records` + where
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("usage sqlite cost query: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	byModel := map[string]*GroupStat{}
+	for i := range summary.ByModel {
+		byModel[strings.ToLower(strings.TrimSpace(summary.ByModel[i].Name))] = &summary.ByModel[i]
+	}
+
+	unpricedByModel := map[string]int64{}
+	unpricedOrder := []string{}
+	var totalCost float64
+	var pricedCalls, unpricedCalls int64
+
+	for rows.Next() {
+		var (
+			model, alias, provider, executor          string
+			inTok, outTok, reasoningTok               int64
+			cachedTok, cacheReadTok, cacheCreationTok int64
+		)
+		if err := rows.Scan(&model, &alias, &provider, &executor, &inTok, &outTok, &reasoningTok,
+			&cachedTok, &cacheReadTok, &cacheCreationTok); err != nil {
+			return fmt.Errorf("usage sqlite cost scan: %w", err)
+		}
+		rec := routerRecord{
+			ProviderModel:       model,
+			ProviderAlias:       alias,
+			Provider:            provider,
+			ExecutorType:        executor,
+			InputTokens:         inTok,
+			OutputTokens:        outTok,
+			ReasoningTokens:     reasoningTok,
+			CachedTokens:        cachedTok,
+			CacheReadTokens:     cacheReadTok,
+			CacheCreationTokens: cacheCreationTok,
+		}
+		cost, _, priced := estimateRecordCost(rec, book)
+		stat := byModel[strings.ToLower(strings.TrimSpace(model))]
+		if priced {
+			pricedCalls++
+			totalCost += cost
+			if stat != nil {
+				// Accumulate raw and round once at the end: rounding on every
+				// record compounds error across thousands of calls.
+				stat.CostUSD += cost
+				stat.PricedCalls++
+				if stat.PriceSource == "" {
+					if price, ok := resolveRecordPrice(rec, book); ok {
+						stat.PriceSource = firstNonEmpty(price.Source, "router")
+					}
+				}
+			}
+			continue
+		}
+		unpricedCalls++
+		if stat != nil {
+			stat.UnpricedCalls++
+		}
+		if _, seen := unpricedByModel[model]; !seen {
+			unpricedOrder = append(unpricedOrder, model)
+		}
+		unpricedByModel[model]++
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("usage sqlite cost rows: %w", err)
+	}
+
+	// Round once, after every record has been added, so per-model rows and the
+	// grand total agree.
+	for i := range summary.ByModel {
+		summary.ByModel[i].CostUSD = round4(summary.ByModel[i].CostUSD)
+	}
+
+	summary.Totals.CostUSD = round4(totalCost)
+	summary.Totals.CostPricedCalls = pricedCalls
+	summary.Totals.CostUnpricedCalls = unpricedCalls
+	summary.Totals.CostPartial = unpricedCalls > 0
+
+	summary.Pricing = PricingMeta{
+		Available: book.Count > 0 || len(book.overrides) > 0,
+		Source:    book.SyncedBy,
+		Revision:  book.Revision,
+		Entries:   book.Count,
+		SyncedAt:  book.SyncedAt,
+		Note:      "Chi phi la uoc tinh theo bang gia cua model-router; model thieu gia khong duoc tinh la mien phi.",
+	}
+	for _, name := range unpricedOrder {
+		summary.Pricing.Unpriced = append(summary.Pricing.Unpriced, UnpricedModel{Model: name, Calls: unpricedByModel[name]})
+	}
+	sort.Slice(summary.Pricing.Unpriced, func(i, j int) bool {
+		if summary.Pricing.Unpriced[i].Calls == summary.Pricing.Unpriced[j].Calls {
+			return summary.Pricing.Unpriced[i].Model < summary.Pricing.Unpriced[j].Model
+		}
+		return summary.Pricing.Unpriced[i].Calls > summary.Pricing.Unpriced[j].Calls
+	})
+	return nil
 }
 
 func (s *SQLiteStore) fillStatusCodes(ctx context.Context, rng QueryRange, filter PageFilter, summary *UsageSummary) error {

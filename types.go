@@ -121,28 +121,29 @@ type SummaryTotals struct {
 
 // GroupStat is one aggregated row for a named dimension.
 type GroupStat struct {
-	Name            string  `json:"name"`
-	Sub             string  `json:"sub,omitempty"`
-	Calls           int64   `json:"calls"`
-	Success         int64   `json:"success"`
-	Failed          int64   `json:"failed"`
-	ErrorRate       float64 `json:"error_rate"`
-	InputTokens     int64   `json:"input_tokens"`
-	OutputTokens    int64   `json:"output_tokens"`
-	ReasoningTokens int64   `json:"reasoning_tokens,omitempty"`
-	CachedTokens    int64   `json:"cached_tokens,omitempty"`
-	CacheHitCalls   int64   `json:"cache_hit_calls,omitempty"`
-	TotalTokens     int64   `json:"total_tokens"`
-	AvgLatencyMs    float64 `json:"avg_latency_ms"`
-	AvgTTFTMs       float64 `json:"avg_ttft_ms"`
-	P50LatencyS     float64 `json:"p50_latency_s,omitempty"`
-	P75LatencyS     float64 `json:"p75_latency_s,omitempty"`
-	P90LatencyS     float64 `json:"p90_latency_s,omitempty"`
-	P95LatencyS     float64 `json:"p95_latency_s,omitempty"`
-	P99LatencyS     float64 `json:"p99_latency_s,omitempty"`
-	P50TTFTS        float64 `json:"p50_ttft_s,omitempty"`
-	P90TTFTS        float64 `json:"p90_ttft_s,omitempty"`
-	TopError        int     `json:"top_error,omitempty"`
+	Name                string  `json:"name"`
+	Sub                 string  `json:"sub,omitempty"`
+	Calls               int64   `json:"calls"`
+	Success             int64   `json:"success"`
+	Failed              int64   `json:"failed"`
+	ErrorRate           float64 `json:"error_rate"`
+	InputTokens         int64   `json:"input_tokens"`
+	OutputTokens        int64   `json:"output_tokens"`
+	ReasoningTokens     int64   `json:"reasoning_tokens,omitempty"`
+	CachedTokens        int64   `json:"cached_tokens,omitempty"`
+	CacheCreationTokens int64   `json:"cache_creation_tokens,omitempty"`
+	CacheHitCalls       int64   `json:"cache_hit_calls,omitempty"`
+	TotalTokens         int64   `json:"total_tokens"`
+	AvgLatencyMs        float64 `json:"avg_latency_ms"`
+	AvgTTFTMs           float64 `json:"avg_ttft_ms"`
+	P50LatencyS         float64 `json:"p50_latency_s,omitempty"`
+	P75LatencyS         float64 `json:"p75_latency_s,omitempty"`
+	P90LatencyS         float64 `json:"p90_latency_s,omitempty"`
+	P95LatencyS         float64 `json:"p95_latency_s,omitempty"`
+	P99LatencyS         float64 `json:"p99_latency_s,omitempty"`
+	P50TTFTS            float64 `json:"p50_ttft_s,omitempty"`
+	P90TTFTS            float64 `json:"p90_ttft_s,omitempty"`
+	TopError            int     `json:"top_error,omitempty"`
 
 	// Estimated cost for this group (models only). CostUSD covers PricedCalls;
 	// UnpricedCalls had no price and are excluded from the sum.
@@ -161,13 +162,13 @@ type UnpricedModel struct {
 
 // PricingMeta describes the price book the estimates were computed from.
 type PricingMeta struct {
-	Available   bool            `json:"available"`
-	Source      string          `json:"source,omitempty"`
-	Revision    uint64          `json:"revision"`
-	Entries     int             `json:"entries"`
-	SyncedAt    string          `json:"synced_at,omitempty"`
-	Unpriced    []UnpricedModel `json:"unpriced_models,omitempty"`
-	Note        string          `json:"note,omitempty"`
+	Available bool            `json:"available"`
+	Source    string          `json:"source,omitempty"`
+	Revision  uint64          `json:"revision"`
+	Entries   int             `json:"entries"`
+	SyncedAt  string          `json:"synced_at,omitempty"`
+	Unpriced  []UnpricedModel `json:"unpriced_models,omitempty"`
+	Note      string          `json:"note,omitempty"`
 }
 
 // HourStat is one bucket of the trend chart with multi-dimension counts.
