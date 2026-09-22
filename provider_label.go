@@ -132,11 +132,28 @@ func accountFromAuthID(authID, provider string) string {
 	return name
 }
 
+// stripScheme removes a leading http:// or https:// scheme so a base URL can
+// be shown compactly ("vsllm.com/v1"). Falls back to the raw value when the
+// string carries no scheme.
+func stripScheme(base string) string {
+	raw := strings.TrimSpace(base)
+	if raw == "" {
+		return ""
+	}
+	lower := strings.ToLower(raw)
+	for _, prefix := range []string{"https://", "http://"} {
+		if strings.HasPrefix(lower, prefix) {
+			return raw[len(prefix):]
+		}
+	}
+	return raw
+}
+
 // providerLabel builds the single operator-facing Provider cell.
 //
-//	openai-compatible-ca2  -> "ca2 · llm.goaichat.top"
-//	antigravity            -> "kevinhoang2334@gmail.com"
-//	unknown-provider       -> "unknown-provider"   (honest raw fallback)
+//	openai-compatible-vsllm  -> "vsllm.com/v1"
+//	antigravity              -> "kevinhoang2334@gmail.com"
+//	unknown-provider         -> "unknown-provider"   (honest raw fallback)
 //
 // The raw provider name is always preserved in .Provider for filtering.
 func providerLabel(detail RequestDetail) string {
@@ -145,26 +162,18 @@ func providerLabel(detail RequestDetail) string {
 	if base == "" {
 		base = baseURLForProvider(provider)
 	}
-	short := providerShortName(provider)
-	host := baseURLHost(base)
 
 	// OAuth accounts are the more specific identity: when we know which
 	// upstream account served the request, that is the label.
 	if account := accountFromAuthID(detail.AuthID, provider); account != "" {
-		if short == "" || strings.EqualFold(short, "antigravity") {
-			return account
-		}
-		return short + " · " + account
+		return account
 	}
 
-	if host != "" {
-		if short == "" {
-			return host
-		}
-		return short + " · " + host
+	if endpoint := stripScheme(base); endpoint != "" {
+		return endpoint
 	}
 	// No endpoint known: still prefer the friendly name over the raw slug.
-	if short != "" {
+	if short := providerShortName(provider); short != "" {
 		return short
 	}
 	return provider

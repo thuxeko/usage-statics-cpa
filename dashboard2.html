@@ -2028,26 +2028,28 @@ function esc(str) {
 }
 
 // providerLabel renders the operator-facing Provider cell. The backend already
-// computes provider_label (config base-url host, or the upstream account for
-// OAuth providers); this mirrors it as a fallback for older payloads so the
-// column never regresses to a bare "openai-compatible-xxx" slug.
+// computes provider_label (upstream base URL without its scheme, or the
+// upstream account for OAuth providers); this mirrors it as a fallback for
+// older payloads so the column never regresses to a bare
+// "openai-compatible-xxx" slug.
 function providerLabel(r) {
   if (!r) return "";
   if (r.provider_label) return r.provider_label;
   var provider = String(r.provider || "").trim();
   if (!provider) return "";
-  var short = provider.indexOf("openai-compatible-") === 0
-    ? provider.slice("openai-compatible-".length)
-    : provider;
-  var host = "";
-  var base = String(r.base_url || "").trim();
-  if (base) {
-    try {
-      host = new URL(base.indexOf("://") >= 0 ? base : "http://" + base).host;
-    } catch (ignore) { host = ""; }
+  var account = String(r.auth_id || "").trim();
+  if (account && account.indexOf(":") < 0 && account.indexOf("openai-compatible") !== 0) {
+    account = account.replace(/\.json$/, "");
+    var prefix = provider.indexOf("openai-compatible-") === 0
+      ? provider.slice("openai-compatible-".length) : provider;
+    if (prefix && account.indexOf(prefix + "-") === 0) account = account.slice(prefix.length + 1);
+    if (account) return account;
   }
-  if (!host) return provider;
-  return short ? (short + " · " + host) : host;
+  var base = String(r.base_url || "").trim();
+  if (base) return base.replace(/^https?:\/\//i, "");
+  var short = provider.indexOf("openai-compatible-") === 0
+    ? provider.slice("openai-compatible-".length) : provider;
+  return short || provider;
 }
 
 // ---- state & filter management ---------------------------------------------

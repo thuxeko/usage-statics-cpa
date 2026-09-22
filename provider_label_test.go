@@ -24,9 +24,19 @@ func TestProviderLabel(t *testing.T) {
 			want:   "antigravity",
 		},
 		{
-			name:   "stored base_url is used when present",
+			name:   "stored base_url is shown as endpoint",
 			detail: RequestDetail{Provider: "openai-compatible-vsllm", BaseURL: "https://vsllm.com/v1"},
-			want:   "vsllm · vsllm.com",
+			want:   "vsllm.com/v1",
+		},
+		{
+			name:   "endpoint keeps its path and port",
+			detail: RequestDetail{Provider: "openai-compatible-localworkbuddy", BaseURL: "http://host.docker.internal:8788/v1"},
+			want:   "host.docker.internal:8788/v1",
+		},
+		{
+			name:   "synthetic auth id never becomes an account",
+			detail: RequestDetail{Provider: "openai-compatible-vsllm", AuthID: "openai-compatibility:vsllm:b1f04bff4493", BaseURL: "https://vsllm.com/v1"},
+			want:   "vsllm.com/v1",
 		},
 		{
 			name:   "unknown provider stays raw",
