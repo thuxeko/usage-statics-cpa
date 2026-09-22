@@ -123,6 +123,7 @@ type SummaryTotals struct {
 type GroupStat struct {
 	Name                string  `json:"name"`
 	Sub                 string  `json:"sub,omitempty"`
+	Provider            string  `json:"provider,omitempty"`
 	Calls               int64   `json:"calls"`
 	Success             int64   `json:"success"`
 	Failed              int64   `json:"failed"`

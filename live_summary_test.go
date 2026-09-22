@@ -170,6 +170,28 @@ func TestLiveSummaryHasTokenTrendAndCost(t *testing.T) {
 		t.Errorf("active_models %d != len(by_model) %d", summary.Totals.ActiveModels, len(summary.ByModel))
 	}
 
+	// --- "Bảng Hiệu năng Model": the Provider column ------------------------
+	//
+	// The column used to render the `sub` field, which is only ever set for the
+	// alias dimension, so it showed "–" for every model row.
+	missingProvider := 0
+	multiProvider := 0
+	for _, m := range summary.ByModel {
+		if m.Provider == "" {
+			missingProvider++
+			continue
+		}
+		t.Logf("  model %-24s provider=%-34s calls=%d", m.Name, m.Provider, m.Calls)
+		if contains(m.Provider, "(+") {
+			multiProvider++
+		}
+	}
+	if missingProvider > 0 {
+		t.Errorf("%d/%d by_model rows have no provider; the column would show '–'",
+			missingProvider, len(summary.ByModel))
+	}
+	t.Logf("by_model: %d rows, %d served by multiple providers", len(summary.ByModel), multiProvider)
+
 	// --- Tab "Token & Cache": the two cards the user reported as empty -----
 	//
 	// "Phân bố Kích thước Context" reads token_distribution, "Mức suy nghĩ

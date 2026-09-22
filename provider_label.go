@@ -149,6 +149,25 @@ func stripScheme(base string) string {
 	return raw
 }
 
+// providerDisplayName renders a raw provider name for display when no per-request
+// identity is available: the upstream endpoint without its scheme, else the
+// friendly short name, else the raw value. Unlike providerLabel it cannot name
+// an OAuth account, because a model can be served by several accounts and the
+// label would have to pick one.
+func providerDisplayName(provider string) string {
+	provider = strings.TrimSpace(provider)
+	if provider == "" {
+		return ""
+	}
+	if endpoint := stripScheme(baseURLForProvider(provider)); endpoint != "" {
+		return endpoint
+	}
+	if short := providerShortName(provider); short != "" {
+		return short
+	}
+	return provider
+}
+
 // providerLabel builds the single operator-facing Provider cell.
 //
 //	openai-compatible-vsllm  -> "vsllm.com/v1"

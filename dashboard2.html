@@ -2770,7 +2770,7 @@ function renderModelPerfTable(models) {
   var html = "";
   list.forEach(function(m) {
     html += '<tr>' +
-      '<td>' + esc(m.sub || '–') + '</td>' +
+      '<td>' + esc(m.provider || m.sub || '–') + '</td>' +
       '<td><strong>' + esc(m.name) + '</strong></td>' +
       '<td class="num">' + n(m.calls) + '</td>' +
       '<td class="num" style="color:' + (m.failed ? 'var(--bad)' : 'var(--text)') + '">' + n(m.failed) + '</td>' +

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -597,6 +598,10 @@ func (s *SQLiteStore) Summary(ctx context.Context, rng QueryRange, filter ...Pag
 	if err := s.fillDistributions(ctx, rng, f, summary); err != nil {
 		return nil, err
 	}
+	// Which provider served each model, for the model performance table.
+	if err := s.fillModelProviders(ctx, rng, f, summary); err != nil {
+		return nil, err
+	}
 	// Derived counters, mirroring what the router path reports so the two
 	// sources agree on the same payload shape.
 	summary.Totals.Success = summary.Totals.Calls - summary.Totals.Failed
@@ -1131,6 +1136,85 @@ func (s *SQLiteStore) fillCosts(ctx context.Context, rng QueryRange, filter Page
 		}
 		return summary.Pricing.Unpriced[i].Calls > summary.Pricing.Unpriced[j].Calls
 	})
+	return nil
+}
+
+// fillModelProviders attaches the serving provider to each by-model row.
+//
+// The "Bảng Hiệu năng Model" table shows a Provider column, but a model row is
+// aggregated over every provider that served it, so there is no single provider
+// on the row itself. Rather than leave the cell blank ("–", which tells the
+// operator nothing), the dominant provider is resolved and shown; when a model
+// was served by more than one, the extra count is reported so the row never
+// pretends the model has exactly one upstream.
+func (s *SQLiteStore) fillModelProviders(ctx context.Context, rng QueryRange, filter PageFilter, summary *UsageSummary) error {
+	if s == nil || s.db == nil || len(summary.ByModel) == 0 {
+		return nil
+	}
+	where, args := filterWhere(rng, filter, nil)
+	query := `SELECT model, provider, auth_id, COUNT(*) AS calls
+		FROM usage_records` + where + `
+		GROUP BY model, provider, auth_id
+		ORDER BY model ASC, calls DESC, provider ASC`
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("usage sqlite model provider query: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	type providerCount struct {
+		label string
+		calls int64
+	}
+	byModel := map[string][]providerCount{}
+	seen := map[string]bool{}
+	for rows.Next() {
+		var model, provider, authID string
+		var calls int64
+		if err := rows.Scan(&model, &provider, &authID, &calls); err != nil {
+			return fmt.Errorf("usage sqlite model provider scan: %w", err)
+		}
+		key := strings.ToLower(strings.TrimSpace(model))
+		// An OAuth account is the more specific identity, exactly as in the
+		// realtime table: "antigravity" alone would not match what the
+		// operator sees there.
+		label := accountFromAuthID(authID, provider)
+		if label == "" {
+			label = providerDisplayName(provider)
+		}
+		if label == "" {
+			label = provider
+		}
+		// Several auth rows collapse onto one label (e.g. the same account
+		// under two executors); count them once.
+		dedupe := key + "\x00" + label
+		if seen[dedupe] {
+			continue
+		}
+		seen[dedupe] = true
+		byModel[key] = append(byModel[key], providerCount{label: label, calls: calls})
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("usage sqlite model provider rows: %w", err)
+	}
+
+	for i := range summary.ByModel {
+		key := strings.ToLower(strings.TrimSpace(summary.ByModel[i].Name))
+		counts := byModel[key]
+		if len(counts) == 0 {
+			continue
+		}
+		// Rows arrive ordered by call count desc, so the first entry is the
+		// identity that served most of this model's traffic.
+		dominant := counts[0]
+		label := dominant.label
+		if len(counts) > 1 {
+			// Be explicit that this is one of several upstreams, not the only
+			// one: the counts differ and hiding that would mislead.
+			label += " (+" + strconv.Itoa(len(counts)-1) + ")"
+		}
+		summary.ByModel[i].Provider = label
+	}
 	return nil
 }
 
