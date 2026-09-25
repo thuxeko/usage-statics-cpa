@@ -2693,7 +2693,10 @@ function refreshData() {
     state.rawSummary = data;
     renderAllViews();
     if (state.tab === "requests_log") {
-      loadRequestsPage(0);
+      // Auto-refresh must reload the CURRENT page, not reset to page 1: the
+      // 15s timer calls refreshData() and jumping back to offset 0 made the
+      // request table unusable while the user was paging through it.
+      reloadRequestsAtCurrentOffset();
     }
     var lu = document.getElementById("lastUpdated");
     if (lu) {
@@ -2924,7 +2927,17 @@ function loadRequestsPage(delta) {
   if (delta === 1) state.reqOffset += state.reqLimit;
   else if (delta === 0) state.reqOffset = 0;
   else if (delta === -1) state.reqOffset = Math.max(0, state.reqOffset - state.reqLimit);
+  fetchRequests();
+}
 
+// reloadRequestsAtCurrentOffset re-reads the page the user is already on
+// (same offset/limit/filters). Auto-refresh uses this so the 15s timer never
+// throws the user back to page 1 while they are inspecting a request.
+function reloadRequestsAtCurrentOffset() {
+  fetchRequests();
+}
+
+function fetchRequests() {
   var url = "/usage/requests?source=plugin&limit=" + state.reqLimit + "&offset=" + state.reqOffset + buildFilterQueryParams();
   if (state.reqStatus) {
     url += "&result=" + encodeURIComponent(state.reqStatus);
