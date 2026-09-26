@@ -180,8 +180,14 @@ func handleResponseIntercept(raw []byte) ([]byte, error) {
 }
 
 type streamChunkInterceptRPC struct {
-	RequestID string `json:"RequestID"`
-	Body      []byte `json:"Body"`
+	RequestID    string `json:"RequestID"`
+	TraceID      string `json:"TraceID"`
+	Model        string `json:"Model"`
+	SourceFormat string `json:"SourceFormat"`
+	Body         []byte `json:"Body"`
+	// ChunkIndex is -1 on the header-only initialization call and >= 0 for
+	// payload chunks. Header-init carries no body, so it is skipped.
+	ChunkIndex int `json:"ChunkIndex"`
 }
 
 func handleStreamChunkIntercept(raw []byte) ([]byte, error) {
@@ -189,6 +195,9 @@ func handleStreamChunkIntercept(raw []byte) ([]byte, error) {
 		var req streamChunkInterceptRPC
 		if err := json.Unmarshal(raw, &req); err == nil {
 			globalPayloadManager.recordStreamChunk(req.RequestID, req.Body)
+			if req.ChunkIndex >= 0 {
+				captureStreamChunk(req.RequestID, req.TraceID, req.Model, req.SourceFormat, req.Body)
+			}
 		}
 	}
 	return okEnvelope(map[string]any{})

@@ -94,14 +94,32 @@ type reqLogStore struct {
 var (
 	reqLogMu    sync.RWMutex
 	reqLog      *reqLogStore
+	reqLogAgg   *streamAggregator
 	reqLogMax   atomic.Int64
 	reqLogDays  atomic.Int64
 	reqLogPathV atomic.Value // string
+
+	// reqLogLive mirrors reqLog without needing reqLogMu. The stream
+	// aggregator's janitor finalises buffers during shutdown, while the
+	// caller already holds reqLogMu for writing: taking the read lock there
+	// would deadlock against the writer waiting on wg.Wait().
+	reqLogLive atomic.Pointer[reqLogStore]
 )
 
 func init() {
 	reqLogMax.Store(reqLogDefaultMaxBodyBytes)
 	reqLogDays.Store(reqLogDefaultRetentionDays)
+}
+
+// streamAgg returns the process-wide stream aggregator, if request logging is
+// active. A nil result means the caller should not buffer anything.
+func streamAgg() *streamAggregator {
+	reqLogMu.RLock()
+	defer reqLogMu.RUnlock()
+	if reqLog == nil || reqLog.disabled.Load() {
+		return nil
+	}
+	return reqLogAgg
 }
 
 // openReqLogStore opens (or reopens) request-logs.db next to usage.db.
@@ -115,11 +133,17 @@ func openReqLogStore(path string) error {
 		reqLog.close()
 		reqLog = nil
 	}
+	if reqLogAgg != nil {
+		reqLogAgg.close()
+		reqLogAgg = nil
+	}
 	st, err := newReqLogStore(path)
 	if err != nil {
 		return err
 	}
 	reqLog = st
+	reqLogLive.Store(st)
+	reqLogAgg = newStreamAggregator(captureStreamResponse)
 	reqLogPathV.Store(path)
 	return nil
 }
@@ -127,7 +151,14 @@ func openReqLogStore(path string) error {
 func closeReqLogStore() {
 	reqLogMu.Lock()
 	defer reqLogMu.Unlock()
+	if reqLogAgg != nil {
+		// Stop the janitor first: it finalises buffers, and those writes must
+		// land in the store that is still open.
+		reqLogAgg.close()
+		reqLogAgg = nil
+	}
 	if reqLog != nil {
+		reqLogLive.Store(nil)
 		reqLog.close()
 		reqLog = nil
 	}
@@ -380,7 +411,7 @@ func captureRequest(req requestInterceptRPC, meta map[string]any, headers map[st
 	})
 }
 
-// captureResponse is the ONLY work done on the response hot path.
+// captureResponse is the ONLY work done on the non-streaming response hot path.
 func captureResponse(req responseInterceptRPC) {
 	st := currentReqLog()
 	if st == nil || st.disabled.Load() {
@@ -392,6 +423,43 @@ func captureResponse(req responseInterceptRPC) {
 		Kind:      "response",
 		Body:      body,
 		BodyBytes: bytes,
+		Truncated: trunc,
+		At:        time.Now(),
+	})
+}
+
+// captureStreamChunk runs on the stream hot path, once per chunk. It only
+// appends bytes into a bounded in-memory buffer - no parsing, no disk, no
+// allocation per chunk beyond the buffer growth.
+func captureStreamChunk(requestID, traceID, model, sourceFmt string, body []byte) {
+	agg := streamAgg()
+	if agg == nil {
+		return
+	}
+	agg.add(requestID, traceID, model, sourceFmt, body)
+}
+
+// captureStreamResponse turns a finished stream buffer into ONE response row.
+// It is called from the aggregator, never from the request path, and it is
+// where the single JSON parse of the whole stream happens. The store is read
+// through an atomic pointer because this runs during shutdown, when reqLogMu
+// is held for writing by closeReqLogStore.
+func captureStreamResponse(b *streamBuf) {
+	st := reqLogLive.Load()
+	if st == nil || st.disabled.Load() {
+		return
+	}
+	max := int(reqLogMax.Load())
+	body, rawBytes, trunc := summariseStream(b, max)
+	st.enqueue(reqLogSample{
+		RequestID: b.requestID,
+		TraceID:   b.traceID,
+		Model:     b.model,
+		SourceFmt: b.sourceFmt,
+		Stream:    true,
+		Kind:      "response",
+		Body:      body,
+		BodyBytes: rawBytes,
 		Truncated: trunc,
 		At:        time.Now(),
 	})
