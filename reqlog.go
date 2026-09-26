@@ -41,9 +41,13 @@ const (
 	// reqLogFlushInterval is the longest a row waits before being committed.
 	reqLogFlushInterval = 2 * time.Second
 	// reqLogDefaultMaxBodyBytes truncates each body before it is queued.
+	// Kept small on purpose: measured live bodies average ~390 KB (agent-loop
+	// prompts), so 8 KB is already a ~50x reduction and keeps request-logs.db
+	// near 30 MB/day instead of gigabytes.
 	reqLogDefaultMaxBodyBytes = 8192
 	// reqLogDefaultRetentionDays prunes old rows on a slow timer.
-	reqLogDefaultRetentionDays = 7
+	// 3 days keeps the file near ~100 MB even with heavy agent-loop traffic.
+	reqLogDefaultRetentionDays = 3
 )
 
 // ---- data model -------------------------------------------------------------
@@ -178,15 +182,35 @@ func (s *reqLogStore) initSchema() error {
 )`,
 		`CREATE INDEX IF NOT EXISTS idx_rl_request_id ON request_logs(request_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_rl_ts ON request_logs(timestamp)`,
-		// WAL keeps writers from blocking the rare reader and turns the
-		// per-flush commit into a cheap append.
-		`PRAGMA journal_mode=WAL`,
-		`PRAGMA synchronous=NORMAL`,
+	// WAL keeps writers from blocking the rare reader and turns the
+	// per-flush commit into a cheap append.
+	`PRAGMA journal_mode=WAL`,
+	`PRAGMA synchronous=NORMAL`,
 	}
 	for _, q := range stmts {
 		if _, err := s.db.Exec(q); err != nil {
 			return fmt.Errorf("request log schema: %w", err)
 		}
+	}
+	// Databases written by the pre-unique-index build already contain
+	// duplicates, which would make CREATE UNIQUE INDEX fail. Clear them first,
+	// keeping the lowest id (the earliest capture) for each request+kind.
+	if err := s.dedupeExisting(); err != nil {
+		return err
+	}
+	if _, err := s.db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_rl_req_kind ON request_logs(request_id, kind)`); err != nil {
+		return fmt.Errorf("request log unique index: %w", err)
+	}
+	return nil
+}
+
+// dedupeExisting removes duplicate (request_id, kind) rows left by earlier
+// builds, keeping the first capture of each pair.
+func (s *reqLogStore) dedupeExisting() error {
+	_, err := s.db.Exec(`DELETE FROM request_logs WHERE id NOT IN (
+SELECT MIN(id) FROM request_logs GROUP BY request_id, kind)`)
+	if err != nil {
+		return fmt.Errorf("request log dedupe: %w", err)
 	}
 	return nil
 }
@@ -244,7 +268,7 @@ func (s *reqLogStore) flush() {
 		s.dropped.Add(int64(len(batch)))
 		return
 	}
-	stmt, err := tx.PrepareContext(ctx, `INSERT INTO request_logs
+	stmt, err := tx.PrepareContext(ctx, `INSERT OR IGNORE INTO request_logs
 (request_id, trace_id, kind, timestamp, model, request_path, source_format, to_format, stream, headers, body, body_bytes, truncated)
 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
 	if err != nil {

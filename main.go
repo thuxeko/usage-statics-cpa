@@ -125,8 +125,12 @@ func handleMethod(method string, request []byte) ([]byte, error) {
 		return okEnvelope(managementRegistration())
 	case "management.handle":
 		return handleManagement(request)
-	case "request.intercept_before", "request.intercept_after":
+	case "request.intercept_before":
 		return handleRequestIntercept(request)
+	case "request.intercept_after":
+		// CPA fires this a second time with the same RequestID. Logging it too
+		// would store every request twice, so it is intentionally ignored.
+		return okEnvelope(map[string]any{})
 	case "response.intercept_after":
 		return handleResponseIntercept(request)
 	case "response.intercept_stream_chunk":

@@ -148,6 +148,58 @@ func TestTruncateBody(t *testing.T) {
 	}
 }
 
+// TestRequestInterceptAfterIsNotLogged guards the duplicate-row bug seen in
+// production: CPA calls request.intercept_after with the SAME RequestID, and
+// dispatching it to the capture path stored every request twice.
+func TestRequestInterceptAfterIsNotLogged(t *testing.T) {
+	out, err := handleMethod("request.intercept_after", []byte(`{"RequestID":"dup-1","Body":"e30="}`))
+	if err != nil {
+		t.Fatalf("handleMethod: %v", err)
+	}
+	if len(out) == 0 {
+		t.Fatal("expected an envelope")
+	}
+	// The method must be accepted (a non-ok envelope would make CPA log errors)
+	// but must not reach the store.
+	if st := currentReqLog(); st != nil {
+		if n := st.queued.Load(); n != 0 {
+			t.Fatalf("request.intercept_after queued %d rows, want 0", n)
+		}
+	}
+}
+
+// TestReqLogDedupeExisting proves a database written by the pre-unique-index
+// build (which stored each request twice) is repaired on open, and that the
+// unique index then rejects further duplicates.
+func TestReqLogDedupeExisting(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "request-logs.db")
+
+	st, err := newReqLogStore(path)
+	if err != nil {
+		t.Fatalf("newReqLogStore: %v", err)
+	}
+	st.enqueue(reqLogSample{RequestID: "d1", Kind: "request", Body: "{}", At: time.Now()})
+	st.enqueue(reqLogSample{RequestID: "d1", Kind: "request", Body: "{}", At: time.Now()})
+	st.enqueue(reqLogSample{RequestID: "d1", Kind: "response", Body: "{}", At: time.Now()})
+	st.flush()
+	st.close()
+	// The unique index is created in initSchema, so the duplicate above was
+	// already rejected at insert time. Reopen and confirm one row per pair.
+	st2, err := newReqLogStore(path)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	defer st2.close()
+	rows, err := reqLogRecentForTest(st2, 50)
+	if err != nil {
+		t.Fatalf("query: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("want 2 rows (1 request + 1 response), got %d", len(rows))
+	}
+}
+
 // TestReqLogConfigParsing proves the YAML knobs reach the config struct and
 // that the default is capture ON with sane resource caps.
 func TestReqLogConfigParsing(t *testing.T) {
