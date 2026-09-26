@@ -15,6 +15,11 @@ import (
 type pluginConfig struct {
 	DataDir       string
 	RetentionDays int
+	// Request-log capture settings. Enabled defaults to true so bro gets the
+	// payload capture he asked for; every knob can dial it down to zero cost.
+	ReqLogEnabled    bool
+	ReqLogMaxBytes   int
+	ReqLogRetentionD int
 }
 
 // parseConfig reads the plugin config YAML block, accepting English keys and
@@ -33,6 +38,23 @@ func parseConfig(raw []byte) pluginConfig {
 	}
 	if v, ok := lookupConfig(m, "retention_days", "用量保留天数"); ok {
 		cfg.RetentionDays = toConfigInt(v)
+	}
+	// Request log. Default ON, 8 KB bodies, 7 day retention.
+	cfg.ReqLogEnabled = true
+	if v, ok := lookupConfig(m, "request_log_enabled"); ok {
+		cfg.ReqLogEnabled = toConfigBool(v, true)
+	}
+	cfg.ReqLogMaxBytes = reqLogDefaultMaxBodyBytes
+	if v, ok := lookupConfig(m, "request_log_max_bytes"); ok {
+		if n := toConfigInt(v); n >= 0 {
+			cfg.ReqLogMaxBytes = n
+		}
+	}
+	cfg.ReqLogRetentionD = reqLogDefaultRetentionDays
+	if v, ok := lookupConfig(m, "request_log_retention_days"); ok {
+		if n := toConfigInt(v); n >= 0 {
+			cfg.ReqLogRetentionD = n
+		}
 	}
 	return cfg
 }
@@ -80,7 +102,7 @@ func toConfigString(v any) string {
 func toConfigInt(v any) int {
 	switch n := v.(type) {
 	case int:
-		return n
+		return int(n)
 	case int64:
 		return int(n)
 	case float64:
@@ -91,4 +113,24 @@ func toConfigInt(v any) int {
 		}
 	}
 	return 0
+}
+
+func toConfigBool(v any, fallback bool) bool {
+	switch b := v.(type) {
+	case bool:
+		return b
+	case string:
+		s := strings.ToLower(strings.TrimSpace(b))
+		if s == "true" || s == "1" || s == "yes" || s == "on" {
+			return true
+		}
+		if s == "false" || s == "0" || s == "no" || s == "off" {
+			return false
+		}
+	case int:
+		return b != 0
+	case float64:
+		return b != 0
+	}
+	return fallback
 }

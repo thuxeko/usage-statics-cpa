@@ -499,10 +499,26 @@ svg.chart {
   flex-shrink: 0;
 }
 .detail-v {
+  /* payload-pre wraps raw request/response bodies inside the detail drawer.
+     It scrolls instead of growing so a large body cannot blow up the page. */
+  overflow-x: auto;
   color: var(--text);
   word-break: break-word;
   overflow-wrap: break-word;
   flex: 1;
+}
+.payload-pre {
+  margin: 0;
+  padding: 10px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  max-height: 420px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .note-callout {
@@ -786,6 +802,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
     <button class="tab-btn" data-tab="performance" onclick="switchTab('performance')">Hiệu năng & Độ trễ</button>
     <button class="tab-btn" data-tab="tokens_efficiency" onclick="switchTab('tokens_efficiency')">Token & Cache</button>
     <button class="tab-btn" data-tab="requests_log" onclick="switchTab('requests_log')">Tra cứu Requests</button>
+    <button class="tab-btn" data-tab="request_log" onclick="switchTab('request_log')">Log Request</button>
     <button class="tab-btn" data-tab="model_prices" onclick="switchTab('model_prices')">Giá Model</button>
   </div>
 
@@ -1238,6 +1255,49 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
       </div>
     </div>
   </div>
+
+  <!-- ===== Log Request: captured request/response payloads (request-logs.db) ===== -->
+  <div id="tab-request_log" class="tab-pane" style="display:none">
+    <div class="panel">
+      <div class="panel-header" style="flex-wrap:wrap;gap:8px">
+        <div>
+          <div class="panel-title">Log Request (Payload gốc)</div>
+          <div class="panel-desc">Request / Response thực tế gửi tới provider — click vào dòng để xem nội dung. Secret (sk-…, Authorization) đã được ẩn.</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <select id="rlogFilterKind" class="filter-select" onchange="loadReqLog()">
+            <option value="">Loại: Tất cả</option>
+            <option value="request">Chỉ Request</option>
+            <option value="response">Chỉ Response</option>
+          </select>
+          <select id="rlogLimit" class="filter-select" onchange="loadReqLog()">
+            <option value="50" selected>50 dòng</option>
+            <option value="100">100 dòng</option>
+            <option value="200">200 dòng</option>
+          </select>
+          <button class="btn-text" onclick="loadReqLog()">Làm mới</button>
+          <span class="badge" id="rlog-stats">—</span>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="clean-table" id="tbl-reqlog">
+          <thead>
+            <tr>
+              <th>Thời gian (UTC+7)</th>
+              <th>Loại</th>
+              <th>Model</th>
+              <th>Request ID</th>
+              <th>Path</th>
+              <th class="num">Kích thước</th>
+              <th>Cắt ngắn</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
     <div id="tab-model_prices" class="tab-pane" style="display:none">
       <div class="panel" id="ov-pricing-panel">
         <div class="ov-pricing-head">
@@ -2633,6 +2693,7 @@ function switchTab(tabId) {
     p.style.display = (p.id === "tab-" + tabId) ? "block" : "none";
   });
   if (tabId === "requests_log") loadRequests();
+  else if (tabId === "request_log") loadReqLog();
   else if (tabId === "model_prices") { if (state.rawSummary) renderAllViews(); openPricingTab(); }
   else renderAllViews();
 }
@@ -3259,6 +3320,87 @@ document.addEventListener("DOMContentLoaded", function() {
   startRealtimeLog();
   refreshData();
 });
+// ---- Log Request tab (request-logs.db) --------------------------------------
+// Listing carries metadata only; the body is fetched lazily on click so the
+// table stays cheap to render on a low-resource host.
+function loadReqLog() {
+  var kindEl = document.getElementById("rlogFilterKind");
+  var limitEl = document.getElementById("rlogLimit");
+  var kind = kindEl ? kindEl.value : "";
+  var limit = limitEl ? limitEl.value : "50";
+  var qs = "?limit=" + encodeURIComponent(limit);
+  if (kind) qs += "&kind=" + encodeURIComponent(kind);
+
+  api("/reqlog" + qs).then(function(res) {
+    var rows = (res && res.rows) || [];
+    var tbody = document.querySelector("#tbl-reqlog tbody");
+    if (!tbody) return;
+    if (rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--fg-muted)">Chưa có bản ghi nào. Đảm bảo request_log_enabled = true và đã có request đi qua.</td></tr>';
+    } else {
+      tbody.innerHTML = rows.map(function(r) {
+        return '<tr style="cursor:pointer" onclick="showReqLogBody(' + r.id + ')">' +
+          '<td>' + esc(formatTimeVN(r.timestamp)) + '</td>' +
+          '<td><span class="badge ' + (r.kind === "response" ? "" : "badge-ok") + '">' + esc(r.kind) + '</span></td>' +
+          '<td>' + esc(r.model || "—") + '</td>' +
+          '<td><code>' + esc(shortReqId(r.request_id)) + '</code></td>' +
+          '<td>' + esc(r.request_path || "—") + '</td>' +
+          '<td class="num">' + n(r.body_bytes) + ' B</td>' +
+          '<td>' + (r.truncated ? '<span class="badge badge-warn">có</span>' : '<span class="badge">không</span>') + '</td>' +
+          '</tr>';
+      }).join("");
+    }
+    var st = (res && res.stats) || {};
+    var statsEl = document.getElementById("rlog-stats");
+    if (statsEl) {
+      statsEl.textContent = st.enabled
+        ? ("ghi: " + n(st.written) + " · chờ: " + n(st.queued) + " · rớt: " + n(st.dropped))
+        : "đang tắt";
+    }
+  }).catch(function(e) {
+    var tbody = document.querySelector("#tbl-reqlog tbody");
+    if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--fg-bad)">Lỗi tải log: ' + esc(String(e)) + '</td></tr>';
+  });
+}
+
+function shortReqId(id) {
+  var s = String(id || "");
+  if (s.length <= 12) return s || "—";
+  return s.slice(0, 8) + "…" + s.slice(-4);
+}
+
+// Reuse the existing detail modal rather than adding a second overlay.
+function showReqLogBody(id) {
+  var modal = document.getElementById("modal-detail");
+  var body = document.getElementById("detail-body");
+  if (!modal || !body) return;
+  body.innerHTML = '<div class="detail-row"><div class="detail-k">Nội dung</div><div class="detail-v"><span class="badge">Đang tải…</span></div></div>';
+  modal.style.display = "flex";
+  api("/reqlog/body?id=" + encodeURIComponent(id)).then(function(d) {
+    var html =
+      '<div class="detail-row"><div class="detail-k">Loại</div><div class="detail-v"><span class="badge ' + (d.kind === "response" ? "" : "badge-ok") + '">' + esc(d.kind) + '</span></div></div>' +
+      '<div class="detail-row"><div class="detail-k">Thời gian (UTC+7)</div><div class="detail-v">' + esc(formatTimeVN(d.timestamp)) + '</div></div>' +
+      '<div class="detail-row"><div class="detail-k">Request ID</div><div class="detail-v"><code>' + esc(d.request_id || "—") + '</code></div></div>' +
+      '<div class="detail-row"><div class="detail-k">Model</div><div class="detail-v">' + esc(d.model || "—") + '</div></div>' +
+      (d.truncated ? '<div class="detail-row"><div class="detail-k">Chú ý</div><div class="detail-v"><span class="badge badge-warn">Nội dung đã bị cắt ngắn theo request_log_max_bytes</span></div></div>' : '') +
+      (d.headers ? '<div class="detail-row"><div class="detail-k">Headers</div><div class="detail-v"><pre class="payload-pre">' + esc(d.headers) + '</pre></div></div>' : '') +
+      '<div class="detail-row"><div class="detail-k">Body</div><div class="detail-v"><pre class="payload-pre">' + esc(prettyJSON(d.body)) + '</pre></div></div>';
+    body.innerHTML = html;
+  }).catch(function(e) {
+    body.innerHTML = '<div class="detail-row"><div class="detail-k">Lỗi</div><div class="detail-v">' + esc(String(e)) + '</div></div>';
+  });
+}
+
+// prettyJSON indents JSON bodies when possible; non-JSON is returned as-is.
+function prettyJSON(s) {
+  var str = String(s == null ? "" : s);
+  if (!str.trim()) return "—";
+  try {
+    return JSON.stringify(JSON.parse(str), null, 2);
+  } catch (e) {
+    return str;
+  }
+}
 </script>
 </body>
 </html>

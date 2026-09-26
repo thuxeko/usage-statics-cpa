@@ -6,6 +6,9 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -52,6 +55,12 @@ const (
 	// managementPricingSyncPath returns models.dev price candidates for the
 	// models seen in the range; the user picks one, nothing is auto-applied.
 	managementPricingSyncPath = "/plugins/" + pluginID + "/pricing/sync"
+	// managementReqLogPath lists captured request/response payload rows.
+	managementReqLogPath = "/plugins/" + pluginID + "/reqlog"
+	// managementReqLogBodyPath returns one captured body by id.
+	managementReqLogBodyPath = "/plugins/" + pluginID + "/reqlog/body"
+	// managementReqLogStatsPath reports capture health (queued/written/dropped).
+	managementReqLogStatsPath = "/plugins/" + pluginID + "/reqlog/stats"
 	// dashboardPath is the FULL public resource URL the browser requests. CPA
 	// mounts Resource routes at /v0/resource/plugins/<id>/<registered Path>
 	// and dispatches the request to the plugin's management.handle with this
@@ -128,10 +137,15 @@ func handleMethod(method string, request []byte) ([]byte, error) {
 }
 
 type requestInterceptRPC struct {
-	RequestID string `json:"RequestID"`
-	TraceID   string `json:"TraceID"`
-	Model     string `json:"Model"`
-	Body      []byte `json:"Body"`
+	RequestID    string         `json:"RequestID"`
+	TraceID      string         `json:"TraceID"`
+	Model        string         `json:"Model"`
+	Body         []byte         `json:"Body"`
+	SourceFormat string         `json:"SourceFormat"`
+	ToFormat     string         `json:"ToFormat"`
+	Stream       bool           `json:"Stream"`
+	Headers      map[string]any `json:"Headers"`
+	Metadata     map[string]any `json:"Metadata"`
 }
 
 func handleRequestIntercept(raw []byte) ([]byte, error) {
@@ -139,6 +153,7 @@ func handleRequestIntercept(raw []byte) ([]byte, error) {
 		var req requestInterceptRPC
 		if err := json.Unmarshal(raw, &req); err == nil {
 			globalPayloadManager.recordInboundRequest(req.RequestID, req.TraceID, req.Model, req.Body)
+			captureRequest(req, req.Metadata, req.Headers)
 		}
 	}
 	return okEnvelope(map[string]any{})
@@ -154,6 +169,7 @@ func handleResponseIntercept(raw []byte) ([]byte, error) {
 		var req responseInterceptRPC
 		if err := json.Unmarshal(raw, &req); err == nil {
 			globalPayloadManager.recordResponse(req.RequestID, req.Body)
+			captureResponse(req)
 		}
 	}
 	return okEnvelope(map[string]any{})
@@ -216,6 +232,9 @@ func registerResponse() registerResponsePayload {
 			ConfigFields: []configFieldInfo{
 				{Name: "data_dir", Type: "string", Description: "Directory for usage.db. Defaults to ~/.cli-proxy-api/plugins/usage-statistics."},
 				{Name: "retention_days", Type: "integer", Description: "Delete usage records older than this many days. 0 disables cleanup."},
+				{Name: "request_log_enabled", Type: "boolean", Description: "Capture request/response payloads into request-logs.db. Default true."},
+				{Name: "request_log_max_bytes", Type: "integer", Description: "Truncate each captured body to this many bytes. Default 8192."},
+				{Name: "request_log_retention_days", Type: "integer", Description: "Delete request log rows older than this many days. 0 disables cleanup. Default 7."},
 			},
 		},
 		Capabilities: capabilitiesInfo{
@@ -263,6 +282,9 @@ func managementRegistration() managementRegistrationPayload {
 			{Method: "GET", Path: managementPricingPath, Description: "Read the price book applied to estimated costs, with per-model status."},
 			{Method: "PUT", Path: managementPricingPath, Description: "Save manual price overrides for estimated costs."},
 			{Method: "GET", Path: managementPricingSyncPath, Description: "List models.dev price candidates for the models in range."},
+			{Method: "GET", Path: managementReqLogPath, Description: "List captured request/response payload rows (request log)."},
+			{Method: "GET", Path: managementReqLogBodyPath, Description: "Return one captured request/response body by id."},
+			{Method: "GET", Path: managementReqLogStatsPath, Description: "Request-log capture health: queued, written, dropped."},
 			{Method: "DELETE", Path: managementUsagePath, Description: "Delete persisted usage records by id."},
 		},
 		Resources: []resourceRouteInfo{
@@ -468,6 +490,21 @@ func handleManagement(request []byte) ([]byte, error) {
 			return okEnvelope(jsonManagementResponse(405, map[string]string{"error": "method not allowed"}))
 		}
 		return chatPayloadGet(req)
+	case path == strings.TrimRight(managementReqLogStatsPath, "/"):
+		if !strings.EqualFold(strings.TrimSpace(req.Method), "GET") {
+			return okEnvelope(jsonManagementResponse(405, map[string]string{"error": "method not allowed"}))
+		}
+		return okEnvelope(jsonManagementResponse(200, reqLogStats()))
+	case path == strings.TrimRight(managementReqLogBodyPath, "/"):
+		if !strings.EqualFold(strings.TrimSpace(req.Method), "GET") {
+			return okEnvelope(jsonManagementResponse(405, map[string]string{"error": "method not allowed"}))
+		}
+		return reqLogBodyGet(req)
+	case path == strings.TrimRight(managementReqLogPath, "/"):
+		if !strings.EqualFold(strings.TrimSpace(req.Method), "GET") {
+			return okEnvelope(jsonManagementResponse(405, map[string]string{"error": "method not allowed"}))
+		}
+		return reqLogListGet(req)
 	case path == strings.TrimRight(managementProvidersPath, "/"):
 		if !strings.EqualFold(strings.TrimSpace(req.Method), "GET") {
 			return okEnvelope(jsonManagementResponse(405, map[string]string{"error": "method not allowed"}))
@@ -718,6 +755,26 @@ func closeStore() {
 	}
 }
 
+// resolveReqLogPath puts request-logs.db beside usage.db but in its own file,
+// so payload growth never touches the analytics database.
+func resolveReqLogPath(cfg pluginConfig) (string, error) {
+	dir := strings.TrimSpace(cfg.DataDir)
+	if dir == "" {
+		dir = strings.TrimSpace(os.Getenv("USAGE_STATISTICS_DIR"))
+	}
+	if dir == "" {
+		if home, err := os.UserHomeDir(); err == nil && strings.TrimSpace(home) != "" {
+			dir = filepath.Join(home, ".cli-proxy-api", "plugins", pluginID)
+		} else {
+			dir = filepath.Join(".cli-proxy-api", "plugins", pluginID)
+		}
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", fmt.Errorf("usage-statistics: create data dir: %w", err)
+	}
+	return filepath.Join(dir, "request-logs.db"), nil
+}
+
 func ensureStore(cfg pluginConfig) error {
 	path, err := resolveDBPath(cfg)
 	if err != nil {
@@ -738,6 +795,27 @@ func ensureStore(cfg pluginConfig) error {
 	globalStore = store
 	currentDBPath = path
 	return nil
+}
+
+// ensureReqLog opens request-logs.db and applies the capture config. It is
+// deliberately tolerant: a failure here must never stop usage accounting.
+func ensureReqLog(cfg pluginConfig) {
+	reqLogMax.Store(int64(cfg.ReqLogMaxBytes))
+	reqLogDays.Store(int64(cfg.ReqLogRetentionD))
+	if !cfg.ReqLogEnabled {
+		closeReqLogStore()
+		return
+	}
+	path, err := resolveReqLogPath(cfg)
+	if err != nil {
+		return
+	}
+	if err := openReqLogStore(path); err != nil {
+		return
+	}
+	if st := currentReqLog(); st != nil {
+		st.disabled.Store(false)
+	}
 }
 
 func maybeCleanup() {
@@ -786,6 +864,7 @@ func configurePlugin(request []byte) error {
 	if err := ensureStore(cfg); err != nil {
 		return err
 	}
+	ensureReqLog(cfg)
 	if cfg.RetentionDays > 0 {
 		cleanupMu.Lock()
 		lastCleanup = time.Time{}
