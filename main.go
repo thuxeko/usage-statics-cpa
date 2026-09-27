@@ -236,7 +236,12 @@ type capabilitiesInfo struct {
 
 func registerResponse() registerResponsePayload {
 	return registerResponsePayload{
-		SchemaVersion: 1,
+		// Version 6 = SchemaVersionRawManagementResponse. Below 6 the host runs
+		// html.EscapeString over every string in a plugin's management JSON, so
+		// the dashboard receives "&quot;"-style entities instead of real quotes
+		// and every stored payload renders as an escaped wall. Keep this in sync
+		// with sdk/pluginabi.SchemaVersion when CPA is upgraded.
+		SchemaVersion: 6,
 		Metadata: metadataInfo{
 			Name:             pluginName,
 			Version:          pluginVersion,
