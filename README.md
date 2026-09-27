@@ -1,45 +1,37 @@
 # CPA Usage Statistics & Analytics Dashboard
 
-## Tổng quan gọn — cập nhật 2026-09-17 (chờ deploy)
-- Đúng 4 card theo CAP: Tổng token (Vào/Ra/Cache), Chi phí ước tính (Chưa cấu hình), Tổng lượt gọi, Model dùng nhiều nhất theo lượt gọi.
-- Hàng biểu đồ: Token usage trend (cột xếp chồng đầu vào/đầu ra, làm tròn đỉnh, bật tắt từng thành phần, tooltip chung khi rê/chạm) cạnh Model usage share (vòng tròn có khe hở, rê hoặc bấm để làm nổi bật một model, số ở tâm đổi theo model đang chọn).
-- Hàng dưới: Sức khỏe Nhà cung cấp cạnh Phân bố Mã lỗi HTTP; Mức sử dụng từng model chiếm một hàng riêng đủ rộng. Cột TC/TB gộp Thành công/Thất bại và luôn tô màu hai bên: thành công xanh, thất bại đỏ, kể cả khi có lỗi. Bảng model có gợi ý cuộn ngang khi tràn cột.
-- Biểu đồ vẫn tự vẽ bằng SVG thuần, không thêm thư viện ngoài; trục số làm tròn đẹp, nhãn trục hai dòng không đè nhau, giữ đúng tỷ lệ theo thời gian thực tế.
-- Trend dùng dữ liệu `by_hour` hiện có, trục giờ Việt Nam. Cache read / cache hit rate tạm vô hiệu hoá vì chưa có dữ liệu cache và quy ước tính cache theo giờ; không suy diễn số liệu. Không port zoom/phân giải phút từ CAP.
-- Hàng dưới: Mức sử dụng từng model cạnh Phân bố Mã lỗi HTTP. Trên mobile, các panel xếp dọc; bảng model cuộn ngang trong card.
-- Bỏ chọn ngày giờ cụ thể, chỉ giữ preset 1h / 6h / 24h / 7d / tất cả; mặc định 1h. Bỏ biểu đồ lưu lượng request khỏi Tổng quan.
-- Chọn cách hiển thị token đầy đủ / k / m / B; giữ sắp xếp, chọn cột và phân trang bảng model.
-- Tab Hiệu năng & Độ trễ ẩn nút điều hướng, giữ mã và nội dung. Giữ nguyên Tools, API, xác thực, SQLite/model-router và chi tiết request; chưa làm phần giá.
-- Bản sửa bố cục/trend chỉ build vào staging; chờ người dùng duyệt trước khi copy plugin live và restart Docker.
-- Attribution: xem THIRD_PARTY_NOTICES.md.
+Plugin nội tuyến (C-ABI Shared Object `.so`) dành cho **CLIProxyAPI (CPA)** tích hợp sẵn giao diện **Analytics Dashboard** hiện đại, nhẹ và không phụ thuộc asset ngoài. Plugin cung cấp các công cụ theo dõi lưu lượng, phân tích hiệu năng đa phân vị độ trễ (P50/P90/P99), thống kê tiêu thụ token/cache, ghi lại payload request/response và tự động bóc tách nguyên nhân lỗi từ log hệ thống.
 
-
-Plugin nội tuyến (C-ABI Shared Object `.so`) dành cho **CLIProxyAPI (CPA)** tích hợp sẵn giao diện **Analytics Dashboard** hiện đại, nhẹ và không phụ thuộc asset ngoài. Plugin cung cấp các công cụ theo dõi lưu lượng, phân tích hiệu năng đa phân vị độ trễ (P50/P90/P99), thống kê tiêu thụ token/cache và tự động bóc tách nguyên nhân lỗi từ log hệ thống.
+Thiết kế cho máy yếu: mọi truy vấn đều có index hỗ trợ, không scan toàn bảng trên hot path, dashboard poll ~24 ms/lần.
 
 ---
 
 ## 🌟 Tính năng nổi bật
 
-- 📊 **Giao diện Analytics Dashboard nội tuyến (Zero External Assets)**: Nhúng trực tiếp vào binary `.so` qua Go `embed`, truy cập trực tiếp từ menu Plugins của CPA Manager Plus (CPAMC) hoặc qua Resource Route `/v0/resource/plugins/usage-statistics/dashboard2`.
-- 🌓 **Tự động đồng bộ Theme (Dark / Light)**: Lắng nghe trạng thái giao diện của CPA Manager cha qua `MutationObserver` để tự động chuyển đổi Sáng/Tối mượt mà.
-- ⏱️ **Thời gian thực & Giờ Việt Nam (UTC+7)**: Tự động chuyển đổi toàn bộ mốc thời gian sang múi giờ Việt Nam (`Asia/Ho_Chi_Minh`), hỗ trợ chế độ **Tự động làm mới (Auto-refresh)** linh hoạt (30s, 1m, 5m, 15m, 30m) kèm hiển thị mốc thời gian cập nhật chính xác.
-- 🔀 **Tương thích hoàn hảo với Model Router**: Tự động nhận diện và đọc trực tiếp từ `model-router.db` (SQLite Read-only) để lấy đầy đủ 100% dữ liệu request và router alias.
+- 📊 **Giao diện Analytics Dashboard nội tuyến (Zero External Assets)**: Nhúng trực tiếp vào binary `.so` qua Go `embed`, truy cập từ menu Plugins của CPA Manager Plus (CPAMC) hoặc qua Resource Route `/v0/resource/plugins/usage-statistics/dashboard2`.
+- 🌓 **Tự động đồng bộ Theme (Dark / Light)**: Lắng nghe trạng thái giao diện của CPA Manager cha qua `MutationObserver`.
+- ⏱️ **Thời gian thực & Giờ Việt Nam (UTC+7)**: Chuyển đổi toàn bộ mốc thời gian sang `Asia/Ho_Chi_Minh`, hỗ trợ **Tự động làm mới** (30s / 1m / 5m / 15m / 30m) kèm mốc thời gian cập nhật.
+- 🔀 **Tương thích Model Router**: Tự động nhận diện và đọc `model-router.db` (SQLite read-only) để lấy đầy đủ dữ liệu request và router alias.
 - 🔍 **Tự động giải mã nguyên nhân lỗi**: Đọc log lỗi CPA, decode HTML entities (`&#34;`, `&#39;`), bóc tách mã lỗi, trích xuất thời điểm reset quota và model gợi ý thay thế.
-- 📈 **Hệ thống phân tích 5 Tab chuyên sâu**:
-  1. **Tổng quan**: Thẻ KPI hợp nhất (Tổng request, % lỗi & trạng thái, Input/Output tokens), biểu đồ lưu lượng theo giờ và phân bố mã lỗi HTTP.
+- 📈 **7 Tab phân tích chuyên sâu**:
+  1. **Tổng quan**: Thẻ KPI (tổng token, chi phí ước tính, tổng lượt gọi, model dùng nhiều nhất), biểu đồ token theo giờ, sức khỏe Provider, phân bố mã lỗi HTTP, bảng hiệu năng model, và khối **Requests (Realtime Log)** hiển thị các request mới nhất.
   2. **Lưu lượng & Model**: Cơ cấu Provider, Router Alias, Client API Keys và bảng hiệu năng Model thật.
-  3. **Hiệu năng & Độ trễ**: Phân vị P50, P75, P90, P95, P99, Max, TTFT, biểu đồ Histogram và Scatter Plot (Latency vs TTFT).
-  4. **Token & Cache**: Thống kê Input/Output/Reasoning Tokens, Cache Hit Rate %, phân bố token theo model và reasoning effort.
-  5. **Tra cứu Requests**: Phân trang theo số lượng dòng (15, 25, 50, 100 dòng), lọc nhanh Thành công/Thất bại, sắp xếp mới nhất, Drawer xem chi tiết request và log lỗi.
+  3. **Hiệu năng & Độ trễ**: Phân vị P50/P75/P90/P95/P99, Max, TTFT, histogram, scatter plot (Latency vs TTFT), top request chậm nhất.
+  4. **Token & Cache**: Input/Output/Reasoning Tokens, Cache Hit Rate %, phân bố token theo model và reasoning effort.
+  5. **Tra cứu Requests**: Phân trang (15/25/50/100 dòng), lọc Thành công/Thất bại, drawer chi tiết request và log lỗi.
+  6. **Log Request**: Xem payload request/response đã ghi lại, tách khối có nhãn (Tổng quan / Tool được gọi / Suy luận / Nội dung trả về / Headers), raw thu gọn trong `<details>`.
+  7. **Giá Model**: Bảng giá thủ công + đối chiếu giá từ models.dev, phục vụ lớp ước tính chi phí.
 - 🧰 **Tools Hub — Reasoning Effort Inspector**: Menu **Tools** (trước đây là dashboard v1) là trung tâm công cụ chẩn đoán. Công cụ đầu tiên kiểm tra một model hỗ trợ những mức `reasoning_effort` nào bằng cách probe thực tế `none` / `low` / `medium` / `high` / `xhigh` và đo reasoning tokens + độ trễ từng mức. Chọn Provider trực tiếp từ CPA sẽ tự động điền Base URL + API Key (nhiều key thì có dropdown chọn), hoặc nhập Base URL tùy chỉnh.
-- 💬 **Chat Preview Capture**: Tự động lưu prompt/response (tối đa 1.000 ký tự mỗi phần) vào bảng phụ `chat_previews` trong `usage.db` cho mọi request, phục vụ tra cứu nội dung ngay trên dashboard.
-- 🔐 **Không lộ bí mật**: API Key chỉ được trả về cho client đã xác thực Management Key; không ghi log hay hiển thị key dạng thô.
+- 💬 **Chat Preview Capture**: Tự động lưu prompt/response (tối đa 1.000 ký tự mỗi phần) vào bảng phụ `chat_previews` trong `usage.db`.
+- 📝 **Request / Response Payload Log**: Ghi payload vào SQLite **riêng** (`request-logs.db`) — không bật `request-log` của CPA. Response dạng stream được **gom chunk thành một row** và trích sẵn `content` / `reasoning` / `tool_calls` / `finish_reason`.
+- 🔐 **Không lộ bí mật**: API Key chỉ trả về cho client đã xác thực Management Key; body đã ghi được scrub credential bằng `maskSecrets` trước khi lưu.
 
 ---
 
 ## 📦 Cài đặt & Triển khai
 
 ### 1. Biên dịch Plugin (.so)
+
 Plugin được xây dựng dưới dạng C-shared library (`.so`) bằng Go 1.22+ và CGO:
 
 ```bash
@@ -48,15 +40,16 @@ docker run --rm -v $(pwd):/src -w /src golang:1.26 bash -c \
 ```
 
 ### 2. Cài đặt vào CLIProxyAPI
-Copy file `usage-statistics.so` vào thư mục `plugins/` của CPA và cấp quyền đọc:
+
+Copy file `usage-statistics.so` vào thư mục `plugins/` của CPA. Container CPA chạy bằng user `1004:1004` nên phải set đúng owner, nếu không plugin sẽ không load được:
 
 ```bash
 cp usage-statistics.so /path/to/cliproxy/plugins/
+chown 1004:1004 /path/to/cliproxy/plugins/usage-statistics.so
 chmod 644 /path/to/cliproxy/plugins/usage-statistics.so
 ```
 
 ### 3. Cấu hình trong `config.yaml` của CPA
-Thêm cấu hình kích hoạt plugin trong file `config.yaml`:
 
 ```yaml
 plugins:
@@ -65,80 +58,120 @@ plugins:
     usage-statistics:
       enabled: true
       priority: 100
-      # Tùy chọn: Thư mục chứa usage.db (nếu không dùng model-router)
+      # Tùy chọn: thư mục chứa usage.db (mặc định ~/.cli-proxy-api/plugins/usage-statistics)
       data_dir: ""
-      # Tùy chọn: Số ngày lưu trữ bản ghi (0 = không tự xóa)
+      # Tùy chọn: số ngày lưu bản ghi usage (0 = không tự xóa)
       retention_days: 0
+      # Ghi payload request/response vào request-logs.db (mặc định: bật)
+      request_log_enabled: true
+      # Cắt mỗi body về tối đa bấy nhiêu byte (mặc định 8192)
+      request_log_max_bytes: 8192
+      # Số ngày lưu request log (mặc định 3, 0 = không tự xóa)
+      request_log_retention_days: 3
 ```
 
+> ⚠️ **Lưu ý về bind-mount**: nếu `config.yaml` được mount dạng **file đơn** (`./config.yaml:/CLIProxyAPI/config.yaml`), sửa file ở host bằng editor/tool tạo inode mới sẽ **không** được container nhìn thấy. Phải sửa in-place từ trong container, ví dụ `sed ... > /tmp/cfg.new && cat /tmp/cfg.new > /CLIProxyAPI/config.yaml`. CPA tự hot-reload, không cần restart.
+
 ### 4. Khởi động lại CPA
+
 ```bash
-docker compose restart cli-proxy-api
+docker compose up -d --force-recreate cli-proxy-api
 ```
 
 ---
 
 ## 🚀 Truy cập Dashboard
 
-Sau khi cài đặt thành công, bro có thể truy cập dashboard theo 2 cách:
-1. **Qua giao diện CPA Manager Plus**: Mở mục **Plugins** trên menu điều hướng → Chọn **Tools** hoặc **Analytics Dashboard**.
-2. **Truy cập trực tiếp qua đường dẫn**:
+1. **Qua giao diện CPA Manager Plus**: mở mục **Plugins** → chọn **Tools** hoặc **Analytics Dashboard**.
+2. **Truy cập trực tiếp**:
    ```text
-   # Analytics Dashboard (5 tab phân tích)
+   # Analytics Dashboard (7 tab phân tích)
    http://<cpa-host>:<cpa-port>/v0/resource/plugins/usage-statistics/dashboard2
 
    # Tools Hub (Reasoning Effort Inspector)
    http://<cpa-host>:<cpa-port>/v0/resource/plugins/usage-statistics/dashboard
    ```
 
+> 🔄 HTML được nhúng trong `.so`, nên sau mỗi lần deploy UI phải **hard-refresh (Ctrl+F5)** — nếu không browser sẽ dùng bản cache cũ và bạn sẽ tưởng bản sửa không có tác dụng.
+
 ---
 
 ## 📡 API Endpoints
 
-Tất cả các API quản trị đều yêu cầu xác thực Management Key của CPA:
+Các API quản trị yêu cầu xác thực Management Key của CPA:
 
 | Method | Endpoint | Mô tả |
 |---|---|---|
-| `GET` | `/v0/management/plugins/usage-statistics/usage/summary` | Trả về dữ liệu thống kê tổng hợp (KPI, phân vị, biểu đồ, bảng model/provider). |
-| `GET` | `/v0/management/plugins/usage-statistics/usage/requests` | Danh sách chi tiết request có phân trang và lọc (limit, offset, result, start, end). |
-| `GET` | `/v0/management/plugins/usage-statistics/error-log` | Tìm và đọc log lỗi CPA chi tiết theo timestamp và mã trạng thái. |
-| `GET` | `/v0/management/plugins/usage-statistics/payload` | Lấy nội dung chat preview (prompt/response) đã lưu cho một request. |
-| `GET` | `/v0/management/plugins/usage-statistics/providers` | Danh sách Provider **đang active** trong CPA kèm Base URL & API Key (dùng cho Tools Hub). |
+| `GET` | `/v0/management/plugins/usage-statistics/usage/summary` | Dữ liệu thống kê tổng hợp (KPI, phân vị, biểu đồ, bảng model/provider). |
+| `GET` | `/v0/management/plugins/usage-statistics/usage/requests` | Danh sách request chi tiết, phân trang + lọc (limit, offset, result, start, end). |
+| `GET` | `/v0/management/plugins/usage-statistics/usage/latest` | N bản ghi mới nhất cho khối **Realtime Log** (đọc theo `rowid DESC`, không scan cửa sổ thời gian). |
+| `GET` | `/v0/management/plugins/usage-statistics/usage` | Danh sách bản ghi thô (tương thích ngược). |
+| `DELETE` | `/v0/management/plugins/usage-statistics/usage` | Xóa bản ghi usage theo ID. |
+| `GET` | `/v0/management/plugins/usage-statistics/error-log` | Tìm và đọc log lỗi CPA theo timestamp + mã trạng thái. |
+| `GET` | `/v0/management/plugins/usage-statistics/payload` | Chat preview (prompt/response) đã lưu cho một request. |
+| `GET` | `/v0/management/plugins/usage-statistics/providers` | Danh sách Provider **đang active** kèm Base URL & API Key (Tools Hub). |
 | `POST` | `/v0/management/plugins/usage-statistics/proxy-fetch` | Proxy request ra upstream từ backend, tránh CORS (fetch models / probe reasoning). |
-| `GET` | `/v0/management/plugins/usage-statistics/usage` | Lấy danh sách bản ghi thô (tương thích ngược). |
-| `DELETE` | `/v0/management/plugins/usage-statistics/usage` | Xóa các bản ghi usage theo ID. |
-| `GET` | `/v0/resource/plugins/usage-statistics/dashboard2` | Giao diện web Analytics Dashboard v2. |
-| `GET` | `/v0/resource/plugins/usage-statistics/dashboard` | Giao diện web Tools Hub (Reasoning Effort Inspector). |
+| `GET` | `/v0/management/plugins/usage-statistics/pricing` | Đọc/ghi bảng giá ước tính (giá router + override thủ công trong `usage.db`). |
+| `GET` | `/v0/management/plugins/usage-statistics/pricing/sync` | Trả về ứng viên giá từ models.dev cho các model trong khoảng thời gian; **không tự áp dụng**. |
+| `GET` | `/v0/management/plugins/usage-statistics/reqlog` | Danh sách row payload đã ghi (metadata, không kèm body). Tham số: `limit`, `kind`, `model`. |
+| `GET` | `/v0/management/plugins/usage-statistics/reqlog/body` | Trả về một body đã ghi theo `id`. |
+| `GET` | `/v0/management/plugins/usage-statistics/reqlog/stats` | Tình trạng ghi log (queued / written / dropped). |
+| `GET` | `/v0/resource/plugins/usage-statistics/dashboard2` | Giao diện Analytics Dashboard v2. |
+| `GET` | `/v0/resource/plugins/usage-statistics/dashboard` | Giao diện Tools Hub (Reasoning Effort Inspector). |
+
+---
+
+## 🗄️ Lưu trữ dữ liệu
+
+Hai database SQLite tách biệt, đều bật WAL:
+
+- **`usage.db`** — bản ghi usage (`usage_records`), chat preview (`chat_previews`), override bảng giá. Retention theo `retention_days`.
+- **`request-logs.db`** — payload request/response (`request_logs`), mỗi request 1 row `request` + 1 row `response`. Retention theo `request_log_retention_days`.
+
+Ghi theo batch (32 row/lần) qua một worker nền duy nhất để không chặn đường request. Aggregator stream có giới hạn cứng: 64 stream đồng thời, 512 KiB text, 1 MiB carry, sweep stream idle sau 45 giây.
+
+> Chi phí đo được trên máy 2-core Celeron 3865U: ghi payload ~1,4 ms/request; mỗi chunk stream ~795 ns; finalize một response ~863 ns. Dashboard poll ~24 ms.
+
+---
+
+## ⚙️ Yêu cầu về `schema_version`
+
+`registerResponse()` khai `SchemaVersion: 6` (`pluginabi.SchemaVersionRawManagementResponse`).
+
+**Đây không phải chi tiết vô hại.** Với `schema_version < 6`, CPA core chạy `html.EscapeString` lên **mọi string** trong JSON trả về từ management API của plugin (`internal/pluginhost/management.go` → `htmlsanitize.JSONBodyIfLikely`), biến `"` thành `&#34;` **trước khi** dữ liệu tới browser. Hậu quả: `JSON.parse` thất bại, drawer Log Request rơi vào nhánh dump raw và hiển thị một "bức tường" entity. Đã từng gây ra 3 vòng sửa nhầm ở tầng renderer.
+
+Có test khoá hành vi này (`schema_version_test.go`) để không tụt version trở lại.
 
 ---
 
 ## 🧪 Kiểm thử (Testing)
 
-Project đi kèm bộ kiểm thử tự động toàn diện:
-
 ```bash
-# Kiểm tra tự động giải mã token xác thực CPAMC
-node test_dashboard_auth.js
+# Go test toàn bộ (một số test cần config.yaml thật của CPA)
+docker run --rm -v $(pwd):/src -w /src golang:1.26 \
+  bash -c "CGO_ENABLED=1 go test -buildvcs=false ./..."
 
-# Kiểm tra parser và decode mã lỗi CPA
-node test_error_decode.js
+# Riêng test lọc provider đang active (cần mount config.yaml thật)
+docker run --rm -v $(pwd):/src -v /path/to/cliproxy/config.yaml:/src/config.yaml:ro \
+  -w /src golang:1.26 bash -c "CGO_ENABLED=1 go test -run TestProvidersActiveOnly -v ./..."
 
-# Kiểm tra đọc và tổng hợp dữ liệu từ model-router.db
-python3 test_router_source.py
-
-# Kiểm tra interceptor lưu prompt/response preview
-python3 test_payload_capture.py
-
-# Kiểm tra toàn bộ ABI C-shared và lifecycle của Plugin
-python3 test_e2e.py
-
-# Go test: /providers chỉ trả về provider đang active & có key
-docker run --rm -v $(pwd):/src -w /src golang:1.26 bash -c \
-  "CGO_ENABLED=1 go test -run TestProvidersActiveOnly -v ./..."
+# Script kiểm tra phụ trợ
+node test_dashboard_auth.js      # Giải mã token xác thực CPAMC
+node test_error_decode.js        # Parser + decode mã lỗi CPA
+python3 test_router_source.py    # Đọc & tổng hợp dữ liệu từ model-router.db
+python3 test_payload_capture.py  # Interceptor lưu prompt/response preview
+python3 test_e2e.py              # ABI C-shared và lifecycle của plugin
 ```
+
+Test Go đáng chú ý:
+
+- `stream_agg_test.go` — aggregator stream: nối chunk, `tool_calls`, cap text (không cap raw bytes), concatenated JSON, terminator.
+- `store_latest_order_test.go` — khối Realtime Log phải mới-nhất-trước. `usage_records.id` là **TEXT/UUID**, nên `ORDER BY id DESC` sắp theo alphabet và làm bảng trông loạn; phải dùng `rowid DESC`.
+- `schema_version_test.go` — khoá `schema_version >= 6`.
+- `reqlog_test.go` — ghi/đọc payload, chống trùng row.
 
 ---
 
 ## 📄 Giấy phép (License)
 
-Dự án được phân phối dưới giấy phép [MIT License](LICENSE).
+Dự án được phân phối dưới giấy phép [MIT License](LICENSE). Attribution: xem [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

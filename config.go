@@ -39,7 +39,7 @@ func parseConfig(raw []byte) pluginConfig {
 	if v, ok := lookupConfig(m, "retention_days", "用量保留天数"); ok {
 		cfg.RetentionDays = toConfigInt(v)
 	}
-	// Request log. Default ON, 8 KB bodies, 7 day retention.
+	// Request log. Default ON, 8 KB bodies, 3 day retention.
 	cfg.ReqLogEnabled = true
 	if v, ok := lookupConfig(m, "request_log_enabled"); ok {
 		cfg.ReqLogEnabled = toConfigBool(v, true)

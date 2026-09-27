@@ -252,7 +252,7 @@ func registerResponse() registerResponsePayload {
 				{Name: "retention_days", Type: "integer", Description: "Delete usage records older than this many days. 0 disables cleanup."},
 				{Name: "request_log_enabled", Type: "boolean", Description: "Capture request/response payloads into request-logs.db. Default true."},
 				{Name: "request_log_max_bytes", Type: "integer", Description: "Truncate each captured body to this many bytes. Default 8192."},
-				{Name: "request_log_retention_days", Type: "integer", Description: "Delete request log rows older than this many days. 0 disables cleanup. Default 7."},
+				{Name: "request_log_retention_days", Type: "integer", Description: "Delete request log rows older than this many days. 0 disables cleanup. Default 3."},
 			},
 		},
 		Capabilities: capabilitiesInfo{
