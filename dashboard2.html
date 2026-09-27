@@ -507,6 +507,17 @@ svg.chart {
   overflow-wrap: break-word;
   flex: 1;
 }
+.rlog-raw { display:block; }
+.rlog-raw > summary { cursor:pointer; list-style:none; user-select:none; }
+.rlog-raw > summary::-webkit-details-marker { display:none; }
+.rlog-raw > summary::before { content:"▸ "; color:var(--text-dim); }
+.rlog-raw[open] > summary::before { content:"▾ "; }
+.rlog-raw-hint { color:var(--text-dim); font-weight:400; text-transform:none; letter-spacing:0; }
+.rlog-raw > .payload-pre { margin-top:7px; }
+.rlog-hdrs { display:flex; flex-direction:column; gap:1px; background:var(--border); border:1px solid var(--border); border-radius:6px; overflow:hidden; }
+.rlog-hdr { display:grid; grid-template-columns:minmax(120px,auto) minmax(0,1fr); gap:10px; background:var(--bg-subtle); padding:5px 9px; font-size:11.5px; }
+.rlog-hdr-k { color:var(--text-dim); font-family:var(--mono); white-space:nowrap; }
+.rlog-hdr-v { font-family:var(--mono); word-break:break-all; }
 .payload-pre {
   margin: 0;
   padding: 10px;
@@ -3401,7 +3412,7 @@ function showReqLogBody(id) {
       '<div class="detail-row"><div class="detail-k">Request ID</div><div class="detail-v"><code>' + esc(d.request_id || "—") + '</code></div></div>' +
       '<div class="detail-row"><div class="detail-k">Model</div><div class="detail-v">' + esc(d.model || "—") + '</div></div>' +
       (d.truncated ? '<div class="detail-row"><div class="detail-k">Chú ý</div><div class="detail-v"><span class="badge badge-warn">Nội dung đã bị cắt ngắn theo request_log_max_bytes</span></div></div>' : '') +
-      (d.headers ? '<div class="detail-row"><div class="detail-k">Headers</div><div class="detail-v"><pre class="payload-pre">' + esc(d.headers) + '</pre></div></div>' : '') +
+      (d.headers ? renderHeaders(d.headers) : '') +
       '<div class="detail-row"><div class="detail-k">Nội dung</div><div class="detail-v">' + renderReqLogBody(d) + '</div></div>';
     body.innerHTML = html;
   }).catch(function(e) {
@@ -3427,8 +3438,49 @@ function tryParseJSON(s) {
   try { return JSON.parse(str); } catch (e) { return null; }
 }
 
+// renderHeaders turns the stored header map into one clean "Name: value" line
+// per header. The stored form is a JSON object whose values are JSON-encoded
+// string arrays (CPA hands over http.Header as map[string][]string), so a raw
+// dump is unreadable: every value shows up as ["x"] with escaped quotes.
+function renderHeaders(raw) {
+  var str = String(raw == null ? "" : raw);
+  if (!str.trim()) return "";
+  var obj = tryParseJSON(str);
+  if (!obj || typeof obj !== "object") {
+    return rlogSection("Headers", '<pre class="payload-pre">' + esc(str) + '</pre>');
+  }
+  var keys = Object.keys(obj).sort();
+  var rows = keys.map(function(k) {
+    var v = obj[k];
+    if (Array.isArray(v)) {
+      v = v.join(", ");
+    } else if (typeof v === "string" && v.charAt(0) === "[" && v.indexOf('"') > 0) {
+      // CPA hands over http.Header as map[string][]string, and the plugin
+      // stores it JSON-in-JSON: the value arrives as the STRING ["x"], not as
+      // an array. Unwrap that second layer so the cell reads just "x".
+      var inner = tryParseJSON(v);
+      v = Array.isArray(inner) ? inner.join(", ") : v;
+    } else if (v && typeof v === "object") {
+      v = JSON.stringify(v);
+    }
+    if (v == null) v = "";
+    return '<div class="rlog-hdr"><span class="rlog-hdr-k">' + esc(k) + '</span>' +
+           '<span class="rlog-hdr-v">' + esc(String(v)) + '</span></div>';
+  }).join("");
+  return rlogSection("Headers (" + keys.length + ")", '<div class="rlog-hdrs">' + rows + '</div>');
+}
+
 function rlogSection(label, inner) {
   return '<div class="rlog-section"><div class="rlog-label">' + esc(label) + '</div>' + inner + '</div>';
+}
+
+// rlogRaw keeps the untouched payload available without letting it dominate the
+// drawer. Raw stream JSON is dense with escaped quotes, so it is collapsed by
+// default: still one click away for debugging, out of the way for reading.
+function rlogRaw(label, text) {
+  return '<div class="rlog-section"><details class="rlog-raw"><summary class="rlog-label">' +
+    esc(label) + ' <span class="rlog-raw-hint">bấm để mở</span></summary>' +
+    '<pre class="payload-pre">' + esc(text) + '</pre></details></div>';
 }
 
 // lenientMessages pulls role/content pairs out of a request body that may be
@@ -3456,23 +3508,43 @@ function lenientMessages(raw) {
     var seg = str.slice(hits[i].end, segEnd);
 
     // Prefer a properly quoted content string; fall back to whatever is there
-    // when the body was cut mid-value.
+    // when the body was cut mid-value. The scanner walks the content value
+    // manually because [^"\\] handling must stop on a REAL closing quote, not
+    // on an escaped one - otherwise the value ends early and the leftover
+    // backslash-quote pairs leak into the rendered block.
     var content = null;
-    var cm = /"content"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(seg);
-    if (cm) {
-      content = cm[1];
-      try { content = JSON.parse('"' + cm[1] + '"'); } catch (e) { /* keep raw */ }
-    } else {
-      var open = seg.indexOf('"content"');
-      if (open >= 0) {
-        var q = seg.indexOf('"', open + 9);
-        if (q >= 0) {
-          content = seg.slice(q + 1) + " …[cắt]";
+    var closed = false;
+    var open = seg.indexOf('"content"');
+    if (open >= 0) {
+      var q = seg.indexOf('"', open + 9);
+      if (q >= 0) {
+        var buf = [];
+        var k = q + 1;
+        while (k < seg.length) {
+          var ch = seg.charAt(k);
+          if (ch === "\\") {
+            var nx = seg.charAt(k + 1);
+            if (nx === "u" && /^[0-9a-fA-F]{4}$/.test(seg.substr(k + 2, 4))) {
+              try {
+                buf.push(String.fromCharCode(parseInt(seg.substr(k + 2, 4), 16)));
+              } catch (e) { buf.push(nx); }
+              k += 6;
+              continue;
+            }
+            buf.push(nx);
+            k += 2;
+            continue;
+          }
+          if (ch === '"') { closed = true; k++; break; }
+          buf.push(ch);
+          k++;
         }
+        content = buf.join("");
+        if (!closed) content += " …[cắt]";
       }
     }
     var isLast = (i === hits.length - 1);
-    out.push({ role: hits[i].role, content: content, partial: isLast && !cm });
+    out.push({ role: hits[i].role, content: content, partial: isLast && !closed });
   }
   return out;
 }
@@ -3526,7 +3598,7 @@ function renderReqLogBody(d) {
     var loose = lenientMessages(d.body);
     if (loose && loose.length) {
       html += renderChatMessages(loose, "khôi phục từ JSON bị cắt");
-      html += rlogSection("Raw (đã cắt)", '<pre class="payload-pre">' + esc(d.body) + '</pre>');
+      html += rlogRaw("Raw (đã cắt)", d.body);
     } else {
       html += rlogSection("Nội dung", '<pre class="payload-pre">' + esc(prettyJSON(d.body)) + '</pre>');
     }
@@ -3553,7 +3625,7 @@ function renderReqLogBody(d) {
       html += rlogSection("Nội dung trả về", '<div class="rlog-body"><span class="badge">không có text (model chỉ trả tool call hoặc stream rỗng)</span></div>');
     }
     if (parsed.preview) {
-      html += rlogSection("Raw đầu stream", '<pre class="payload-pre">' + esc(parsed.preview) + '</pre>');
+      html += rlogRaw("Raw đầu stream", parsed.preview);
     }
   } else {
     html += rlogSection("Nội dung", '<pre class="payload-pre">' + esc(prettyJSON(d.body)) + '</pre>');
