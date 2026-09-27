@@ -3531,7 +3531,15 @@ function lenientMessages(raw) {
               k += 6;
               continue;
             }
-            buf.push(nx);
+            // Decode the escape, do NOT emit the letter: \n must become a real
+            // newline, otherwise the prompt renders as "one line.nnNext line"
+            // and every tab turns into a stray "t".
+            if (nx === "n") buf.push("\n");
+            else if (nx === "t") buf.push("\t");
+            else if (nx === "r") buf.push("\r");
+            else if (nx === "b") buf.push("\b");
+            else if (nx === "f") buf.push("\f");
+            else buf.push(nx);
             k += 2;
             continue;
           }
