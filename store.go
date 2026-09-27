@@ -1315,17 +1315,18 @@ func (s *SQLiteStore) StoreLatest(ctx context.Context, n int) ([]RequestDetail, 
 	if n > 200 {
 		n = 200
 	}
-	// ORDER BY id DESC alone walks the primary key backwards, so no temp
-	// b-tree is built. Ordering by (timestamp, id) forced SQLite to sort the
-	// whole result set ("USE TEMP B-TREE FOR LAST TERM OF ORDER BY"), which the
-	// realtime panel pays for on every poll. The id is monotonic, so it gives
-	// the same "newest first" order for free.
+	// ORDER BY rowid DESC walks the implicit INTEGER primary key backwards and
+	// is genuinely newest-first. Do NOT order by the `id` column: it is a
+	// UUID/TEXT primary key (hex digests like "fffb0a5b-…" and
+	// "fffda9230c76…"), so ordering by it sorts alphabetically and interleaves
+	// August, September and July rows at random. That mistake shipped once and
+	// made the realtime panel look shuffled.
 	query := `SELECT id, timestamp, api_key, provider, model, alias, source, auth_id, auth_index, auth_type, base_url, executor_type,
 		reasoning_effort, service_tier, latency_ms, ttft_ms,
 		input_tokens, output_tokens, reasoning_tokens, cached_tokens, cache_read_tokens, cache_creation_tokens, total_tokens,
 		failed, failure_status_code, failure_body
 		FROM usage_records
-		ORDER BY id DESC
+		ORDER BY rowid DESC
 		LIMIT ?`
 	rows, err := s.db.QueryContext(ctx, query, n)
 	if err != nil {
