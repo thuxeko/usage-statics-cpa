@@ -521,6 +521,24 @@ svg.chart {
   word-break: break-word;
 }
 
+/* Log Request drawer: the stored body is rendered as labelled sections instead
+   of one raw JSON dump, so the tool calls / reasoning / answer are each
+   readable without scrolling through the envelope. */
+.rlog-section { margin-bottom: 14px; }
+.rlog-section:last-child { margin-bottom: 0; }
+.rlog-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+.rlog-body { display: flex; flex-wrap: wrap; gap: 6px; }
+.rlog-body > .payload-pre { width: 100%; }
+.rlog-msg { width: 100%; }
+.rlog-msg + .rlog-msg { margin-top: 10px; }
+.rlog-msg-pre { margin-top: 6px; max-height: 260px; }
+
 .note-callout {
   padding: 8px 10px;
   border-radius: var(--radius-sm);
@@ -3384,7 +3402,7 @@ function showReqLogBody(id) {
       '<div class="detail-row"><div class="detail-k">Model</div><div class="detail-v">' + esc(d.model || "—") + '</div></div>' +
       (d.truncated ? '<div class="detail-row"><div class="detail-k">Chú ý</div><div class="detail-v"><span class="badge badge-warn">Nội dung đã bị cắt ngắn theo request_log_max_bytes</span></div></div>' : '') +
       (d.headers ? '<div class="detail-row"><div class="detail-k">Headers</div><div class="detail-v"><pre class="payload-pre">' + esc(d.headers) + '</pre></div></div>' : '') +
-      '<div class="detail-row"><div class="detail-k">Body</div><div class="detail-v"><pre class="payload-pre">' + esc(prettyJSON(d.body)) + '</pre></div></div>';
+      '<div class="detail-row"><div class="detail-k">Nội dung</div><div class="detail-v">' + renderReqLogBody(d) + '</div></div>';
     body.innerHTML = html;
   }).catch(function(e) {
     body.innerHTML = '<div class="detail-row"><div class="detail-k">Lỗi</div><div class="detail-v">' + esc(String(e)) + '</div></div>';
@@ -3400,6 +3418,147 @@ function prettyJSON(s) {
   } catch (e) {
     return str;
   }
+}
+
+// tryParseJSON returns the parsed value, or null when the string is not JSON.
+function tryParseJSON(s) {
+  var str = String(s == null ? "" : s);
+  if (!str.trim()) return null;
+  try { return JSON.parse(str); } catch (e) { return null; }
+}
+
+function rlogSection(label, inner) {
+  return '<div class="rlog-section"><div class="rlog-label">' + esc(label) + '</div>' + inner + '</div>';
+}
+
+// lenientMessages pulls role/content pairs out of a request body that may be
+// TRUNCATED (the stored request body is capped at request_log_max_bytes, so a
+// 400 KB agent prompt arrives as an invalid JSON prefix). A strict JSON.parse
+// can never succeed on those, which is why this scans textually instead of
+// giving up and dumping the raw blob.
+function lenientMessages(raw) {
+  var str = String(raw == null ? "" : raw);
+  var mi = str.indexOf('"messages"');
+  if (mi < 0) return null;
+  var arr = str.indexOf("[", mi);
+  if (arr < 0) return null;
+
+  var out = [];
+  var re = /"role"\s*:\s*"([^"]*)"/g;
+  re.lastIndex = arr;
+  var hits = [];
+  var m;
+  while ((m = re.exec(str)) !== null) hits.push({ role: m[1], at: m.index, end: re.lastIndex });
+  if (hits.length === 0) return null;
+
+  for (var i = 0; i < hits.length; i++) {
+    var segEnd = (i + 1 < hits.length) ? hits[i + 1].at : str.length;
+    var seg = str.slice(hits[i].end, segEnd);
+
+    // Prefer a properly quoted content string; fall back to whatever is there
+    // when the body was cut mid-value.
+    var content = null;
+    var cm = /"content"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(seg);
+    if (cm) {
+      content = cm[1];
+      try { content = JSON.parse('"' + cm[1] + '"'); } catch (e) { /* keep raw */ }
+    } else {
+      var open = seg.indexOf('"content"');
+      if (open >= 0) {
+        var q = seg.indexOf('"', open + 9);
+        if (q >= 0) {
+          content = seg.slice(q + 1) + " …[cắt]";
+        }
+      }
+    }
+    var isLast = (i === hits.length - 1);
+    out.push({ role: hits[i].role, content: content, partial: isLast && !cm });
+  }
+  return out;
+}
+
+// renderChatMessages splits an OpenAI-style messages array into one readable
+// block per turn. A 400 KB agent prompt is otherwise a single wall of text.
+function renderChatMessages(msgs, note) {
+  if (!Array.isArray(msgs) || msgs.length === 0) return "";
+  var out = msgs.map(function(m) {
+    var role = (m && m.role) ? String(m.role) : "unknown";
+    var cls = role === "user" ? "badge-ok" : (role === "system" ? "badge-warn" : "");
+    var content = "";
+    if (typeof m.content === "string") {
+      content = m.content;
+    } else if (Array.isArray(m.content)) {
+      // Multimodal: keep the text parts, note the rest by type.
+      content = m.content.map(function(p) {
+        if (p && typeof p.text === "string") return p.text;
+        return "[" + ((p && p.type) || "part") + "]";
+      }).join("\n");
+    } else if (m.content != null) {
+      content = JSON.stringify(m.content);
+    }
+    var extra = "";
+    if (m.tool_calls) extra += '<pre class="payload-pre rlog-msg-pre">' + esc(prettyJSON(JSON.stringify(m.tool_calls))) + '</pre>';
+    if (m.tool_call_id) extra += '<div class="rlog-label">tool_call_id: ' + esc(m.tool_call_id) + '</div>';
+    var partial = m.partial ? ' <span class="badge badge-warn">cắt</span>' : "";
+    return '<div class="rlog-msg"><span class="badge ' + cls + '">' + esc(role) + '</span>' + partial +
+      '<pre class="payload-pre rlog-msg-pre">' + esc(content || "—") + '</pre>' + extra + '</div>';
+  }).join("");
+  return rlogSection("Messages (" + msgs.length + ")" + (note ? " — " + note : ""), out);
+}
+
+// renderReqLogBody turns a stored body into labelled sections. Streamed
+// responses are stored as a self-describing envelope; everything else falls
+// back to a JSON dump so nothing is ever hidden.
+function renderReqLogBody(d) {
+  var parsed = tryParseJSON(d.body);
+  var html = "";
+
+  if (d.kind === "request" && parsed && parsed.messages) {
+    html += renderChatMessages(parsed.messages);
+    var rest = {};
+    Object.keys(parsed).forEach(function(k) { if (k !== "messages") rest[k] = parsed[k]; });
+    if (Object.keys(rest).length) {
+      html += rlogSection("Tham số khác", '<pre class="payload-pre">' + esc(prettyJSON(JSON.stringify(rest))) + '</pre>');
+    }
+  } else if (d.kind === "request") {
+    // Stored request bodies are capped, so a large agent prompt is an invalid
+    // JSON prefix. Recover the turns textually instead of dumping one blob.
+    var loose = lenientMessages(d.body);
+    if (loose && loose.length) {
+      html += renderChatMessages(loose, "khôi phục từ JSON bị cắt");
+      html += rlogSection("Raw (đã cắt)", '<pre class="payload-pre">' + esc(d.body) + '</pre>');
+    } else {
+      html += rlogSection("Nội dung", '<pre class="payload-pre">' + esc(prettyJSON(d.body)) + '</pre>');
+    }
+  } else if (parsed && parsed.aggregated) {
+    // Streamed response envelope.
+    var meta = [];
+    meta.push('<span class="badge">' + n(parsed.chunks) + ' chunk</span>');
+    meta.push('<span class="badge">' + n(parsed.raw_bytes) + ' B gốc</span>');
+    if (parsed.finish_reason) meta.push('<span class="badge badge-ok">' + esc(parsed.finish_reason) + '</span>');
+    if (parsed.truncated) meta.push('<span class="badge badge-warn">đã cắt</span>');
+    html += rlogSection("Tổng quan", '<div class="rlog-body">' + meta.join("") + '</div>');
+
+    if (parsed.tool_calls && parsed.tool_calls.length) {
+      html += rlogSection("Tool được gọi", '<div class="rlog-body">' +
+        parsed.tool_calls.map(function(t) { return '<span class="badge badge-ok">' + esc(t) + '</span>'; }).join("") + '</div>');
+    }
+    if (parsed.reasoning) {
+      html += rlogSection("Suy luận", '<pre class="payload-pre">' + esc(parsed.reasoning) + '</pre>');
+    }
+    if (parsed.content) {
+      html += rlogSection("Nội dung trả về", '<pre class="payload-pre">' + esc(parsed.content) + '</pre>');
+    }
+    if (!parsed.content && !parsed.reasoning && !(parsed.tool_calls && parsed.tool_calls.length)) {
+      html += rlogSection("Nội dung trả về", '<div class="rlog-body"><span class="badge">không có text (model chỉ trả tool call hoặc stream rỗng)</span></div>');
+    }
+    if (parsed.preview) {
+      html += rlogSection("Raw đầu stream", '<pre class="payload-pre">' + esc(parsed.preview) + '</pre>');
+    }
+  } else {
+    html += rlogSection("Nội dung", '<pre class="payload-pre">' + esc(prettyJSON(d.body)) + '</pre>');
+  }
+  return html;
 }
 </script>
 </body>
