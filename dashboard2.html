@@ -1299,12 +1299,15 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
             <option value="request">Chỉ Request</option>
             <option value="response">Chỉ Response</option>
           </select>
-          <select id="rlogLimit" class="filter-select" onchange="loadReqLog()">
+          <select id="rlogLimit" class="filter-select" onchange="changeReqLogLimit(this.value)">
             <option value="50" selected>50 dòng</option>
             <option value="100">100 dòng</option>
             <option value="200">200 dòng</option>
           </select>
           <button class="btn-text" onclick="loadReqLog()">Làm mới</button>
+          <button class="btn-text" onclick="loadReqLogPage(-1)">Trang trước</button>
+          <span class="badge" id="rlog-page-info">Trang 1 / 1</span>
+          <button class="btn-text" onclick="loadReqLogPage(1)">Trang sau</button>
           <span class="badge" id="rlog-stats">—</span>
         </div>
       </div>
@@ -3352,16 +3355,34 @@ document.addEventListener("DOMContentLoaded", function() {
 // ---- Log Request tab (request-logs.db) --------------------------------------
 // Listing carries metadata only; the body is fetched lazily on click so the
 // table stays cheap to render on a low-resource host.
+// The listing is paged: the offset is sent to the backend, which returns the
+// matching rows AND the true total, so the counter reads "Trang X / Y".
+var rlogState = { offset: 0, limit: 50 };
+
+function changeReqLogLimit(value) {
+  var v = parseInt(value, 10);
+  if (!v || v <= 0) return;
+  rlogState.limit = v;
+  rlogState.offset = 0;
+  loadReqLog();
+}
+
+function loadReqLogPage(delta) {
+  var next = rlogState.offset + delta * rlogState.limit;
+  rlogState.offset = next < 0 ? 0 : next;
+  loadReqLog();
+}
+
 function loadReqLog() {
   var kindEl = document.getElementById("rlogFilterKind");
-  var limitEl = document.getElementById("rlogLimit");
   var kind = kindEl ? kindEl.value : "";
-  var limit = limitEl ? limitEl.value : "50";
-  var qs = "?limit=" + encodeURIComponent(limit);
+  var qs = "?limit=" + encodeURIComponent(rlogState.limit) +
+    "&offset=" + encodeURIComponent(rlogState.offset);
   if (kind) qs += "&kind=" + encodeURIComponent(kind);
 
   api("/reqlog" + qs).then(function(res) {
     var rows = (res && res.rows) || [];
+    var total = (res && typeof res.total === "number") ? res.total : rows.length;
     var tbody = document.querySelector("#tbl-reqlog tbody");
     if (!tbody) return;
     if (rows.length === 0) {
@@ -3379,6 +3400,10 @@ function loadReqLog() {
           '</tr>';
       }).join("");
     }
+    var pageNum = Math.floor(rlogState.offset / rlogState.limit) + 1;
+    var totalPages = Math.ceil(total / rlogState.limit) || 1;
+    var pageEl = document.getElementById("rlog-page-info");
+    if (pageEl) pageEl.textContent = "Trang " + pageNum + " / " + totalPages + " (" + n(total) + " bản ghi)";
     var st = (res && res.stats) || {};
     var statsEl = document.getElementById("rlog-stats");
     if (statsEl) {

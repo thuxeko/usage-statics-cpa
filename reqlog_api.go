@@ -8,7 +8,8 @@ import (
 	"strings"
 )
 
-// reqLogListGet serves GET /plugins/usage-statistics/reqlog?limit=&kind=&model=
+// reqLogListGet serves
+// GET /plugins/usage-statistics/reqlog?limit=&offset=&kind=&model=
 // It returns metadata only — never bodies — so the listing stays cheap.
 func reqLogListGet(req managementRequest) ([]byte, error) {
 	limit := 100
@@ -17,30 +18,27 @@ func reqLogListGet(req managementRequest) ([]byte, error) {
 			limit = v
 		}
 	}
-	rows, err := reqLogRecent(limit)
+	offset := 0
+	if raw := strings.TrimSpace(firstValue(req.Query, "offset")); raw != "" {
+		if v, err := strconv.Atoi(raw); err == nil && v > 0 {
+			offset = v
+		}
+	}
+	filter := reqLogFilter{
+		Kind:  strings.TrimSpace(firstValue(req.Query, "kind")),
+		Model: strings.TrimSpace(firstValue(req.Query, "model")),
+	}
+	rows, total, err := reqLogPage(limit, offset, filter)
 	if err != nil {
 		return okEnvelope(jsonManagementResponse(http.StatusInternalServerError,
 			map[string]string{"error": "request log read failed"}))
 	}
-	kind := strings.TrimSpace(firstValue(req.Query, "kind"))
-	model := strings.TrimSpace(firstValue(req.Query, "model"))
-	if kind != "" || model != "" {
-		filtered := rows[:0]
-		for _, r := range rows {
-			if kind != "" && r["kind"] != kind {
-				continue
-			}
-			if model != "" && !strings.Contains(strings.ToLower(stringVal(r["model"])), strings.ToLower(model)) {
-				continue
-			}
-			filtered = append(filtered, r)
-		}
-		rows = filtered
-	}
 	return okEnvelope(jsonManagementResponse(http.StatusOK, map[string]any{
-		"rows":  rows,
-		"total": len(rows),
-		"stats": reqLogStats(),
+		"rows":   rows,
+		"total":  total,
+		"offset": offset,
+		"limit":  limit,
+		"stats":  reqLogStats(),
 	}))
 }
 

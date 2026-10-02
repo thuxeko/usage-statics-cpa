@@ -509,21 +509,78 @@ func firstStr(m map[string]any, fallback string, keys ...string) string {
 
 // ---- query ------------------------------------------------------------------
 
-func reqLogRecent(limit int) ([]map[string]any, error) {
+// reqLogFilter narrows a request-log listing. An empty field matches
+// everything, so the zero value lists the whole log.
+type reqLogFilter struct {
+	Kind  string
+	Model string
+}
+
+// where renders the filter as a SQL predicate plus its bind arguments.
+//
+// The filter used to be applied in Go AFTER the LIMIT, so the caller received
+// `limit` rows and then threw some away: page 2 was short, `total` reported the
+// size of the page instead of the size of the log, and a filter that matched
+// few rows could render an empty page while later pages still held matches.
+// Pushing it into SQL makes the page and the total agree.
+func (f reqLogFilter) where() (string, []any) {
+	var clauses []string
+	var args []any
+	if f.Kind != "" {
+		clauses = append(clauses, "kind = ?")
+		args = append(args, f.Kind)
+	}
+	if f.Model != "" {
+		clauses = append(clauses, "LOWER(model) LIKE ?")
+		args = append(args, "%"+strings.ToLower(f.Model)+"%")
+	}
+	if len(clauses) == 0 {
+		return "", args
+	}
+	return " WHERE " + strings.Join(clauses, " AND "), args
+}
+
+// reqLogPage returns one page of the log plus the total number of rows that
+// match the filter, so the caller can render "Trang X / Y".
+func reqLogPage(limit, offset int, filter reqLogFilter) ([]map[string]any, int64, error) {
 	st := currentReqLog()
 	if st == nil {
-		return []map[string]any{}, nil
+		return []map[string]any{}, 0, nil
 	}
+	return st.page(limit, offset, filter)
+}
+
+// page is the store-bound implementation of reqLogPage, so tests can page an
+// explicit store instead of the package-level singleton.
+func (st *reqLogStore) page(limit, offset int, filter reqLogFilter) ([]map[string]any, int64, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
+	if offset < 0 {
+		offset = 0
+	}
+	whereSQL, whereArgs := filter.where()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
+	var total int64
+	countSQL := `SELECT COUNT(*) FROM request_logs` + whereSQL
+	if err := st.db.QueryRowContext(ctx, countSQL, whereArgs...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	if offset >= int(total) {
+		// Deleting rows or narrowing the filter can leave the caller past the
+		// end; fall back to the first page instead of rendering an empty table.
+		offset = 0
+	}
+
+	args := append(append([]any{}, whereArgs...), limit, offset)
 	rows, err := st.db.QueryContext(ctx, `SELECT id, request_id, kind, timestamp, model,
 request_path, source_format, to_format, stream, body_bytes, truncated
-FROM request_logs ORDER BY id DESC LIMIT ?`, limit)
+FROM request_logs`+whereSQL+` ORDER BY id DESC LIMIT ? OFFSET ?`, args...)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 	out := []map[string]any{}
@@ -541,7 +598,7 @@ FROM request_logs ORDER BY id DESC LIMIT ?`, limit)
 			"body_bytes": bytes, "truncated": trunc == 1,
 		})
 	}
-	return out, nil
+	return out, total, rows.Err()
 }
 
 func reqLogBody(id int64) (map[string]any, error) {
