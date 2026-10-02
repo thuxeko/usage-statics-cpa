@@ -338,19 +338,45 @@ type cpaConfigProvider struct {
 	Models   []string `json:"models"`
 }
 
+// cpaProviderGroup is one openai-compatibility entry. It decodes BOTH config
+// layouts so an un-migrated file keeps working:
+//
+//	v7: openai-compatibility at the document root, credentials under
+//	    "api-key-entries"
+//	v8: groups under api-keys.openai-compatibility, credentials renamed to
+//	    "keys"
+type cpaProviderGroup struct {
+	Name          string   `yaml:"name"`
+	Prefix        string   `yaml:"prefix"`
+	BaseURL       string   `yaml:"base-url"`
+	Disabled      bool     `yaml:"disabled"`
+	APIKey        string   `yaml:"api-key"`
+	APIKeys       []string `yaml:"api-keys"`
+	APIKeyEntries []struct {
+		APIKey string `yaml:"api-key"`
+	} `yaml:"api-key-entries"`
+	Keys []struct {
+		APIKey string `yaml:"api-key"`
+	} `yaml:"keys"`
+	Models []any `yaml:"models"`
+}
+
 type cpaYAMLConfig struct {
-	OpenAICompatibility []struct {
-		Name          string   `yaml:"name"`
-		Prefix        string   `yaml:"prefix"`
-		BaseURL       string   `yaml:"base-url"`
-		Disabled      bool     `yaml:"disabled"`
-		APIKey        string   `yaml:"api-key"`
-		APIKeys       []string `yaml:"api-keys"`
-		APIKeyEntries []struct {
-			APIKey string `yaml:"api-key"`
-		} `yaml:"api-key-entries"`
-		Models []any `yaml:"models"`
-	} `yaml:"openai-compatibility"`
+	// v7: the groups lived at the document root.
+	OpenAICompatibility []cpaProviderGroup `yaml:"openai-compatibility"`
+	// v8: the same groups moved under api-keys.
+	APIKeys struct {
+		OpenAICompatibility []cpaProviderGroup `yaml:"openai-compatibility"`
+	} `yaml:"api-keys"`
+}
+
+// groups returns the openai-compatibility entries from whichever layout the
+// file uses. v8 wins when both are present, because that is what CPA reads.
+func (c cpaYAMLConfig) groups() []cpaProviderGroup {
+	if len(c.APIKeys.OpenAICompatibility) > 0 {
+		return c.APIKeys.OpenAICompatibility
+	}
+	return c.OpenAICompatibility
 }
 
 func findCPAConfigFile() string {
@@ -371,6 +397,8 @@ func findCPAConfigFile() string {
 	return ""
 }
 
+// readCPAConfigProviders reads the openai-compatibility providers from CPA's
+// config.yaml, whichever layout it uses (v7 root or v8 under api-keys).
 func readCPAConfigProviders() []cpaConfigProvider {
 	path := findCPAConfigFile()
 	if path == "" {
@@ -380,35 +408,48 @@ func readCPAConfigProviders() []cpaConfigProvider {
 	if err != nil {
 		return nil
 	}
+	return parseCPAConfigProviders(data)
+}
+
+func parseCPAConfigProviders(data []byte) []cpaConfigProvider {
 	var cfg cpaYAMLConfig
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil
 	}
 
 	var results []cpaConfigProvider
-	for _, item := range cfg.OpenAICompatibility {
+	for _, item := range cfg.groups() {
+		baseURL := strings.TrimSpace(item.BaseURL)
+		// v8 lets the panel write "name" at the end of the group; an entry that
+		// still has no name falls back to the endpoint host so it stays
+		// selectable in the Tools view instead of disappearing.
 		name := strings.TrimSpace(item.Name)
+		if name == "" {
+			name = providerNameFromBaseURL(baseURL)
+		}
 		if name == "" {
 			continue
 		}
 		var keys []string
+		// v7 credential list.
 		for _, e := range item.APIKeyEntries {
-			k := strings.TrimSpace(e.APIKey)
-			if k != "" {
+			if k := strings.TrimSpace(e.APIKey); k != "" {
+				keys = append(keys, k)
+			}
+		}
+		// v8 renamed the credential list to "keys".
+		for _, e := range item.Keys {
+			if k := strings.TrimSpace(e.APIKey); k != "" {
 				keys = append(keys, k)
 			}
 		}
 		for _, k := range item.APIKeys {
-			k = strings.TrimSpace(k)
-			if k != "" {
+			if k = strings.TrimSpace(k); k != "" {
 				keys = append(keys, k)
 			}
 		}
-		if item.APIKey != "" {
-			k := strings.TrimSpace(item.APIKey)
-			if k != "" {
-				keys = append(keys, k)
-			}
+		if k := strings.TrimSpace(item.APIKey); k != "" {
+			keys = append(keys, k)
 		}
 
 		var models []string
@@ -428,13 +469,42 @@ func readCPAConfigProviders() []cpaConfigProvider {
 		results = append(results, cpaConfigProvider{
 			Name:     name,
 			Prefix:   item.Prefix,
-			BaseURL:  strings.TrimSpace(item.BaseURL),
+			BaseURL:  baseURL,
 			Keys:     keys,
 			Disabled: item.Disabled,
 			Models:   models,
 		})
 	}
 	return results
+}
+
+// providerNameFromBaseURL derives a usable provider label from an endpoint when
+// the config entry carries no name. It strips the scheme, any credentials, the
+// port and the leading "api."/"www." so "https://api.vsllm.cc/v1" -> "vsllm".
+func providerNameFromBaseURL(baseURL string) string {
+	host := strings.TrimSpace(baseURL)
+	if host == "" {
+		return ""
+	}
+	if i := strings.Index(host, "://"); i >= 0 {
+		host = host[i+3:]
+	}
+	if i := strings.IndexAny(host, "/?#"); i >= 0 {
+		host = host[:i]
+	}
+	if i := strings.LastIndex(host, "@"); i >= 0 {
+		host = host[i+1:]
+	}
+	if i := strings.LastIndex(host, ":"); i >= 0 {
+		host = host[:i]
+	}
+	host = strings.TrimPrefix(strings.ToLower(host), "www.")
+	host = strings.TrimPrefix(host, "api.")
+	parts := strings.Split(host, ".")
+	if len(parts) == 0 || parts[0] == "" {
+		return ""
+	}
+	return parts[0]
 }
 
 // providersGet returns the list of ACTIVE (non-disabled) configured providers with their Base URLs and API Keys.
