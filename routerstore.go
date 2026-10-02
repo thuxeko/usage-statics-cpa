@@ -904,6 +904,70 @@ func enhancedAccFor(m map[string]*enhancedGroupAcc, key string) *enhancedGroupAc
 	return g
 }
 
+// groupAccumulator carries the two derived per-group numbers the SQL GROUP BY
+// cannot express: the error rate and the latency percentiles.
+//
+// fillGrouped used to return Calls/Failed but leave ErrorRate and the
+// P50/P90 latency fields at their zero value, because a percentile needs the
+// raw samples, not a SUM. The dashboard reads those fields directly, so the
+// Provider Health card rendered "0.0%" for every provider that had failures
+// and "–" in the P50/P90 columns. fillDistributions already scans every row
+// for the same range; recording the per-provider and per-model samples there
+// costs one map lookup per row and no extra query.
+type groupAccumulator struct {
+	byName map[string]*groupAccumulator
+	failed int64
+	latS   []float64
+	ttftS  []float64
+}
+
+// apply writes the accumulated error rate and percentiles onto the group rows
+// built by fillGrouped, matched by the same name the SQL grouped on.
+func (a *groupAccumulator) apply(rows []GroupStat) {
+	for i := range rows {
+		acc := a.byName[strings.TrimSpace(rows[i].Name)]
+		if acc == nil {
+			continue
+		}
+		if rows[i].Calls > 0 {
+			rows[i].ErrorRate = round2(float64(acc.failed) / float64(rows[i].Calls) * 100)
+		}
+		rows[i].Success = rows[i].Calls - rows[i].Failed
+		rows[i].P50LatencyS = round2(percentile(acc.latS, 0.5))
+		rows[i].P90LatencyS = round2(percentile(acc.latS, 0.9))
+		rows[i].P50TTFTS = round2(percentile(acc.ttftS, 0.5))
+		rows[i].P90TTFTS = round2(percentile(acc.ttftS, 0.9))
+	}
+}
+
+func (a *groupAccumulator) add(name string, failed bool, latS, ttftS float64) {
+	if a.byName == nil {
+		a.byName = map[string]*groupAccumulator{}
+	}
+	key := strings.TrimSpace(name)
+	acc, ok := a.byName[key]
+	if !ok {
+		acc = &groupAccumulator{}
+		a.byName[key] = acc
+	}
+	if failed {
+		acc.failed++
+	}
+	if latS > 0 {
+		acc.latS = append(acc.latS, latS)
+	}
+	if ttftS > 0 {
+		acc.ttftS = append(acc.ttftS, ttftS)
+	}
+}
+
+func (a *groupAccumulator) sub(name string) *groupAccumulator {
+	if a.byName == nil {
+		return nil
+	}
+	return a.byName[strings.TrimSpace(name)]
+}
+
 func enhancedToStats(m map[string]*enhancedGroupAcc, subMaps map[string]map[string]int64) []GroupStat {
 	out := make([]GroupStat, 0, len(m))
 	for name, g := range m {

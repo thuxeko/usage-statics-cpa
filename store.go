@@ -942,20 +942,70 @@ var (
 // concerns in one loop makes either one harder to change safely. The scan
 // returns only aggregate counters plus a bounded sample (150 scatter points,
 // 30 slowest rows), so the payload stays small no matter how wide the range.
-func (s *SQLiteStore) fillDistributions(ctx context.Context, rng QueryRange, filter PageFilter, summary *UsageSummary) error {
-	if s == nil || s.db == nil {
-		return nil
-	}
-	where, args := filterWhere(rng, filter, nil)
-	query := `SELECT id, timestamp, api_key, provider, model, alias, source,
+//
+// distributionQuery renders the scan behind fillDistributions.
+//
+// It returns rows newest-first, so the bounded samples that query feeds
+// (scatter points, slowest requests) describe the most recent traffic.
+//
+// The tie-break `, id DESC` is deliberately absent. `id` is a UUID, so it
+// ordered nothing meaningful, yet it made SQLite add "USE TEMP B-TREE FOR LAST
+// TERM OF ORDER BY" — sorting the entire result set on every dashboard poll.
+// `timestamp DESC` alone is satisfied by idx_usage_records_timestamp, so the
+// sort disappears while newest-first semantics are preserved (timestamps carry
+// nanosecond precision; measured ties are 19 rows out of 50k, all within the
+// same request batch).
+func distributionQuery(where string) string {
+	return `SELECT id, timestamp, api_key, provider, model, alias, source,
 		auth_id, auth_index, auth_type, base_url, executor_type,
 		reasoning_effort, service_tier, latency_ms, ttft_ms,
 		input_tokens, output_tokens, reasoning_tokens, cached_tokens,
 		cache_read_tokens, cache_creation_tokens, total_tokens,
 		failed, failure_status_code, failure_body
 		FROM usage_records` + where + `
-		ORDER BY timestamp DESC, id DESC`
-	rows, err := s.db.QueryContext(ctx, query, args...)
+		ORDER BY timestamp DESC`
+}
+
+// distributionTimestamps returns the scan order of the first n rows, used to
+// verify that the distribution scan still yields newest-first.
+func (s *SQLiteStore) distributionTimestamps(ctx context.Context, rng QueryRange, n int) ([]string, error) {
+	where, args := filterWhere(rng, PageFilter{}, nil)
+	rows, err := s.db.QueryContext(ctx, distributionQuery(where), args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() && len(out) < n {
+		var (
+			id, timestamp, apiKey, provider, model, alias, source string
+			authID, authIndex, authType, baseURL, executorType     string
+			reasoningEffort, serviceTier                           string
+			latencyMs, ttftMs                                      int64
+			inTok, outTok, reasoningTok, cachedTok                 int64
+			cacheReadTok, cacheCreationTok, totalTok               int64
+			failedInt, failureStatusCode                           int
+			failureBody                                            string
+		)
+		if err := rows.Scan(&id, &timestamp, &apiKey, &provider, &model, &alias, &source,
+			&authID, &authIndex, &authType, &baseURL, &executorType,
+			&reasoningEffort, &serviceTier, &latencyMs, &ttftMs,
+			&inTok, &outTok, &reasoningTok, &cachedTok,
+			&cacheReadTok, &cacheCreationTok, &totalTok,
+			&failedInt, &failureStatusCode, &failureBody); err != nil {
+			return nil, err
+		}
+		out = append(out, timestamp)
+	}
+	return out, rows.Err()
+}
+
+func (s *SQLiteStore) fillDistributions(ctx context.Context, rng QueryRange, filter PageFilter, summary *UsageSummary) error {
+	if s == nil || s.db == nil {
+		return nil
+	}
+	where, args := filterWhere(rng, filter, nil)
+	rows, err := s.db.QueryContext(ctx, distributionQuery(where), args...)
 	if err != nil {
 		return fmt.Errorf("usage sqlite distribution query: %w", err)
 	}
@@ -963,6 +1013,10 @@ func (s *SQLiteStore) fillDistributions(ctx context.Context, rng QueryRange, fil
 
 	efforts := map[string]*enhancedGroupAcc{}
 	executors := map[string]*enhancedGroupAcc{}
+	// Per-provider and per-model samples, used to fill in the error rate and
+	// the P50/P90 columns that fillGrouped's SQL aggregate cannot produce.
+	provAcc := &groupAccumulator{}
+	modelAcc := &groupAccumulator{}
 	latBuckets := map[string]int64{}
 	tokBuckets := map[string]int64{}
 	var scatterPoints []ScatterPoint
@@ -1013,6 +1067,12 @@ func (s *SQLiteStore) fillDistributions(ctx context.Context, rng QueryRange, fil
 			d.Tokens.InputTokens, d.Tokens.OutputTokens, d.Tokens.ReasoningTokens,
 			cached, d.Tokens.TotalTokens, d.FailureStatusCode)
 
+		// Same grouping keys fillGrouped used in SQL (provider falls back to
+		// "unknown", model is taken verbatim), so the derived numbers land on
+		// the matching rows.
+		provAcc.add(firstNonEmpty(d.Provider, "unknown"), d.Failed, latS, ttftS)
+		modelAcc.add(d.Model, d.Failed, latS, ttftS)
+
 		latBuckets[latencyBucketLabel(latS)]++
 		tokBuckets[tokenBucketLabel(d.Tokens.InputTokens)]++
 
@@ -1044,6 +1104,10 @@ func (s *SQLiteStore) fillDistributions(ctx context.Context, rng QueryRange, fil
 
 	summary.ByEffort = enhancedToStats(efforts, nil)
 	summary.ByExecutor = enhancedToStats(executors, nil)
+	// fillGrouped produced Calls/Failed for these two dimensions from SQL;
+	// the error rate and percentiles are filled here from the same scan.
+	provAcc.apply(summary.ByProvider)
+	modelAcc.apply(summary.ByModel)
 	for _, b := range latencyBucketOrder {
 		summary.LatencyDistribution = append(summary.LatencyDistribution, DistributionBucket{Label: b, Calls: latBuckets[b]})
 	}
