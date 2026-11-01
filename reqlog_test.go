@@ -29,7 +29,7 @@ func TestReqLogRoundTrip(t *testing.T) {
 	})
 	st.enqueue(reqLogSample{
 		RequestID: "rid-1", Kind: "response",
-		Body: `{"choices":[{"delta":{"content":"hi"}}]}`,
+		Body:      `{"choices":[{"delta":{"content":"hi"}}]}`,
 		BodyBytes: 39, At: time.Now().UTC(),
 	})
 	// Force the commit; the batch threshold alone would not have fired.
@@ -148,23 +148,84 @@ func TestTruncateBody(t *testing.T) {
 	}
 }
 
-// TestRequestInterceptAfterIsNotLogged guards the duplicate-row bug seen in
-// production: CPA calls request.intercept_after with the SAME RequestID, and
-// dispatching it to the capture path stored every request twice.
-func TestRequestInterceptAfterIsNotLogged(t *testing.T) {
-	out, err := handleMethod("request.intercept_after", []byte(`{"RequestID":"dup-1","Body":"e30="}`))
+// A routed call lands as TWO request rows under one trace: the call's own row
+// (model is still the combo name) and the row for the re-issued upstream call
+// (model is the resolved target, requested_model keeps the provider prefix).
+// They must collapse into one row that shows the combo AND the real model.
+func TestReqLogGroupedShowsComboAndRealModel(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "request-logs.db")
+	st, err := newReqLogStore(path)
 	if err != nil {
-		t.Fatalf("handleMethod: %v", err)
+		t.Fatalf("newReqLogStore: %v", err)
 	}
-	if len(out) == 0 {
-		t.Fatal("expected an envelope")
+	t.Cleanup(st.close)
+
+	prev := reqLog
+	reqLog = st
+	reqLogLive.Store(st)
+	t.Cleanup(func() {
+		reqLog = prev
+		reqLogLive.Store(prev)
+	})
+
+	// The call's own row: the client asked for "strong", nothing rewritten yet.
+	if _, err := handleMethod("request.intercept_before",
+		[]byte(`{"RequestID":"own-1","TraceID":"t-1","Model":"strong","RequestedModel":"strong","Body":"e30="}`)); err != nil {
+		t.Fatalf("intercept_before: %v", err)
 	}
-	// The method must be accepted (a non-ok envelope would make CPA log errors)
-	// but must not reach the store.
-	if st := currentReqLog(); st != nil {
-		if n := st.queued.Load(); n != 0 {
-			t.Fatalf("request.intercept_after queued %d rows, want 0", n)
-		}
+	// The re-issued upstream call: model is the target, requested_model keeps the
+	// provider prefix (this is what CPA actually reports).
+	if _, err := handleMethod("request.intercept_after",
+		[]byte(`{"RequestID":"res-1","TraceID":"t-1","Model":"qwen3.8-max-0902","RequestedModel":"ca2/qwen3.8-max-0902","Body":"e30="}`)); err != nil {
+		t.Fatalf("intercept_after: %v", err)
+	}
+	st.flush()
+
+	rows, total, err := st.page(50, 0, reqLogFilter{Grouped: true})
+	if err != nil {
+		t.Fatalf("page: %v", err)
+	}
+	if total != 1 || len(rows) != 1 {
+		t.Fatalf("grouped total=%d rows=%d, want 1 call", total, len(rows))
+	}
+	if got := rows[0]["combo"]; got != "strong" {
+		t.Fatalf("combo = %v, want strong (taken from the call's own row)", got)
+	}
+	if got := rows[0]["model"]; got != "qwen3.8-max-0902" {
+		t.Fatalf("model = %v, want the resolved target", got)
+	}
+	if got := rows[0]["attempts"]; got != 1 {
+		t.Fatalf("attempts = %v, want 1 physical target", got)
+	}
+}
+
+// Writing the same (request_id, kind) twice must update in place, never append:
+// both intercept hooks fire for a call, and a plain INSERT would double every
+// request in the log.
+func TestReqLogUpsertsDuplicateCapture(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "request-logs.db")
+	st, err := newReqLogStore(path)
+	if err != nil {
+		t.Fatalf("newReqLogStore: %v", err)
+	}
+	t.Cleanup(st.close)
+
+	st.enqueue(reqLogSample{RequestID: "dup", Kind: "request", Model: "first",
+		RequestedModel: "first", Body: "{}", At: time.Now().UTC()})
+	st.flush()
+	st.enqueue(reqLogSample{RequestID: "dup", Kind: "request", Model: "second",
+		RequestedModel: "second", Body: "{}", At: time.Now().UTC()})
+	st.flush()
+
+	rows, total, err := st.page(50, 0, reqLogFilter{})
+	if err != nil {
+		t.Fatalf("page: %v", err)
+	}
+	if total != 1 || len(rows) != 1 {
+		t.Fatalf("total=%d rows=%d, want 1 (upsert, not append)", total, len(rows))
+	}
+	if got := rows[0]["model"]; got != "second" {
+		t.Fatalf("model = %v, want the later capture to win", got)
 	}
 }
 

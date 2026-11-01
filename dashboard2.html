@@ -125,6 +125,10 @@ body {
 .badge-bad { border-color: var(--bad); color: var(--bad); background: var(--bad-bg); }
 .badge-warn { border-color: var(--warn); color: var(--warn); background: var(--warn-bg); }
 .badge-accent { border-color: var(--accent); color: var(--accent); background: var(--accent-glow); }
+/* A combo name is the thing the reader scans for, so it gets its own colour
+   instead of sharing the neutral badge with the model name next to it. */
+.badge-combo { border-color: var(--purple); color: var(--purple); background: rgba(168, 85, 247, 0.12); }
+.muted { color: var(--text-muted); }
 
 /* Sticky Global Filter Bar */
 .filter-bar {
@@ -1294,10 +1298,10 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
           <div class="panel-desc">Request / Response thực tế gửi tới provider — click vào dòng để xem nội dung. Secret (sk-…, Authorization) đã được ẩn.</div>
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <select id="rlogFilterKind" class="filter-select" onchange="loadReqLog()">
-            <option value="">Loại: Tất cả</option>
-            <option value="request">Chỉ Request</option>
-            <option value="response">Chỉ Response</option>
+          <select id="rlogFilterCombo" class="filter-select" onchange="resetReqLogPage()">
+            <option value="">Nguồn: Tất cả</option>
+            <option value="combo">Chỉ qua combo</option>
+            <option value="direct">Chỉ gọi thẳng</option>
           </select>
           <select id="rlogLimit" class="filter-select" onchange="changeReqLogLimit(this.value)">
             <option value="50" selected>50 dòng</option>
@@ -1316,12 +1320,12 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
           <thead>
             <tr>
               <th>Thời gian (UTC+7)</th>
-              <th>Loại</th>
-              <th>Model</th>
+              <th>Combo</th>
+              <th>Model thật</th>
               <th>Request ID</th>
-              <th>Path</th>
+              <th class="num">Số đích</th>
               <th class="num">Kích thước</th>
-              <th>Cắt ngắn</th>
+              <th>Payload</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -3367,6 +3371,13 @@ function changeReqLogLimit(value) {
   loadReqLog();
 }
 
+// Changing the source filter restarts from page 1; keeping the old offset
+// would land the user on a page that no longer exists under the new filter.
+function resetReqLogPage() {
+  rlogState.offset = 0;
+  loadReqLog();
+}
+
 function loadReqLogPage(delta) {
   var next = rlogState.offset + delta * rlogState.limit;
   rlogState.offset = next < 0 ? 0 : next;
@@ -3374,11 +3385,11 @@ function loadReqLogPage(delta) {
 }
 
 function loadReqLog() {
-  var kindEl = document.getElementById("rlogFilterKind");
-  var kind = kindEl ? kindEl.value : "";
+  var comboEl = document.getElementById("rlogFilterCombo");
+  var combo = comboEl ? comboEl.value : "";
   var qs = "?limit=" + encodeURIComponent(rlogState.limit) +
     "&offset=" + encodeURIComponent(rlogState.offset);
-  if (kind) qs += "&kind=" + encodeURIComponent(kind);
+  if (combo) qs += "&combo=" + encodeURIComponent(combo);
 
   api("/reqlog" + qs).then(function(res) {
     var rows = (res && res.rows) || [];
@@ -3389,21 +3400,35 @@ function loadReqLog() {
       tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--fg-muted)">Chưa có bản ghi nào. Đảm bảo request_log_enabled = true và đã có request đi qua.</td></tr>';
     } else {
       tbody.innerHTML = rows.map(function(r) {
+        // One row = one call. The combo (if any) and the model that actually
+        // answered are shown apart, so a routed call no longer looks like two
+        // unrelated lines.
+        var comboCell = r.combo
+          ? '<span class="badge badge-combo">' + esc(r.combo) + '</span>'
+          : '<span class="muted">— gọi thẳng</span>';
+        var attemptsCell = (r.attempts > 1)
+          ? '<span class="badge badge-warn">' + n(r.attempts) + ' đích</span>'
+          : '<span class="muted">1</span>';
+        var payloadCell =
+          '<button class="btn-text" onclick="event.stopPropagation();showReqLogBody(' + r.id + ')">req</button>' +
+          ((r.payload && r.payload.response_id)
+            ? ' <button class="btn-text" onclick="event.stopPropagation();showReqLogBody(' + r.payload.response_id + ')">res</button>'
+            : ' <span class="badge">chưa có res</span>');
         return '<tr style="cursor:pointer" onclick="showReqLogBody(' + r.id + ')">' +
           '<td>' + esc(formatTimeVN(r.timestamp)) + '</td>' +
-          '<td><span class="badge ' + (r.kind === "response" ? "" : "badge-ok") + '">' + esc(r.kind) + '</span></td>' +
+          '<td>' + comboCell + '</td>' +
           '<td>' + esc(r.model || "—") + '</td>' +
           '<td><code>' + esc(shortReqId(r.request_id)) + '</code></td>' +
-          '<td>' + esc(r.request_path || "—") + '</td>' +
+          '<td class="num">' + attemptsCell + '</td>' +
           '<td class="num">' + n(r.body_bytes) + ' B</td>' +
-          '<td>' + (r.truncated ? '<span class="badge badge-warn">có</span>' : '<span class="badge">không</span>') + '</td>' +
+          '<td>' + payloadCell + '</td>' +
           '</tr>';
       }).join("");
     }
     var pageNum = Math.floor(rlogState.offset / rlogState.limit) + 1;
     var totalPages = Math.ceil(total / rlogState.limit) || 1;
     var pageEl = document.getElementById("rlog-page-info");
-    if (pageEl) pageEl.textContent = "Trang " + pageNum + " / " + totalPages + " (" + n(total) + " bản ghi)";
+    if (pageEl) pageEl.textContent = "Trang " + pageNum + " / " + totalPages + " (" + n(total) + " lượt gọi)";
     var st = (res && res.stats) || {};
     var statsEl = document.getElementById("rlog-stats");
     if (statsEl) {
@@ -3435,6 +3460,9 @@ function showReqLogBody(id) {
       '<div class="detail-row"><div class="detail-k">Loại</div><div class="detail-v"><span class="badge ' + (d.kind === "response" ? "" : "badge-ok") + '">' + esc(d.kind) + '</span></div></div>' +
       '<div class="detail-row"><div class="detail-k">Thời gian (UTC+7)</div><div class="detail-v">' + esc(formatTimeVN(d.timestamp)) + '</div></div>' +
       '<div class="detail-row"><div class="detail-k">Request ID</div><div class="detail-v"><code>' + esc(d.request_id || "—") + '</code></div></div>' +
+      ((d.requested_model && d.requested_model !== d.model)
+        ? '<div class="detail-row"><div class="detail-k">Gọi qua combo</div><div class="detail-v"><span class="badge badge-combo">' + esc(d.requested_model) + '</span></div></div>'
+        : '') +
       '<div class="detail-row"><div class="detail-k">Model</div><div class="detail-v">' + esc(d.model || "—") + '</div></div>' +
       (d.truncated ? '<div class="detail-row"><div class="detail-k">Chú ý</div><div class="detail-v"><span class="badge badge-warn">Nội dung đã bị cắt ngắn theo request_log_max_bytes</span></div></div>' : '') +
       (d.headers ? renderHeaders(d.headers) : '') +

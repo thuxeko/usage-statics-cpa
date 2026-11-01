@@ -128,9 +128,14 @@ func handleMethod(method string, request []byte) ([]byte, error) {
 	case "request.intercept_before":
 		return handleRequestIntercept(request)
 	case "request.intercept_after":
-		// CPA fires this a second time with the same RequestID. Logging it too
-		// would store every request twice, so it is intentionally ignored.
-		return okEnvelope(map[string]any{})
+		// CPA fires this a second time for the same call, now with the model the
+		// router actually selected. The before-call sees the model BEFORE
+		// combo/alias rewriting, so on its own it cannot tell a routed call from
+		// a direct one. Both are recorded and the flush upserts on
+		// (request_id, kind), so this later, resolved capture is the one that
+		// survives. Rows are only lost if this never fires, in which case the
+		// before-capture is still there.
+		return handleRequestIntercept(request)
 	case "response.intercept_after":
 		return handleResponseIntercept(request)
 	case "response.intercept_stream_chunk":
@@ -141,15 +146,20 @@ func handleMethod(method string, request []byte) ([]byte, error) {
 }
 
 type requestInterceptRPC struct {
-	RequestID    string         `json:"RequestID"`
-	TraceID      string         `json:"TraceID"`
-	Model        string         `json:"Model"`
-	Body         []byte         `json:"Body"`
-	SourceFormat string         `json:"SourceFormat"`
-	ToFormat     string         `json:"ToFormat"`
-	Stream       bool           `json:"Stream"`
-	Headers      map[string]any `json:"Headers"`
-	Metadata     map[string]any `json:"Metadata"`
+	RequestID string `json:"RequestID"`
+	TraceID   string `json:"TraceID"`
+	Model     string `json:"Model"`
+	// RequestedModel is the client-requested model BEFORE alias/combo rewriting.
+	// Going through a combo this holds the combo name (fast/balanced/...), while
+	// Model holds the resolved target. It is what lets the log show which combo
+	// a request came from instead of only the physical model.
+	RequestedModel string         `json:"RequestedModel"`
+	Body           []byte         `json:"Body"`
+	SourceFormat   string         `json:"SourceFormat"`
+	ToFormat       string         `json:"ToFormat"`
+	Stream         bool           `json:"Stream"`
+	Headers        map[string]any `json:"Headers"`
+	Metadata       map[string]any `json:"Metadata"`
 }
 
 func handleRequestIntercept(raw []byte) ([]byte, error) {
@@ -734,11 +744,11 @@ func jsonManagementResponseHTML(html string) managementResponse {
 	return managementResponse{
 		StatusCode: 200,
 		Headers: map[string][]string{
-			"Content-Type":             {"text/html; charset=utf-8"},
-			"Cache-Control":            {"no-store"},
-			"Referrer-Policy":          {"no-referrer"},
-			"X-Content-Type-Options":   {"nosniff"},
-			"Content-Security-Policy":  {"default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'"},
+			"Content-Type":            {"text/html; charset=utf-8"},
+			"Cache-Control":           {"no-store"},
+			"Referrer-Policy":         {"no-referrer"},
+			"X-Content-Type-Options":  {"nosniff"},
+			"Content-Security-Policy": {"default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'"},
 		},
 		Body: []byte(html),
 	}
