@@ -382,6 +382,24 @@ body {
   .log-box { max-height: 180px; }
   .data-table th, .data-table td { font-size: 11px; padding: 6px 8px; }
 }
+
+/* Management key bar (see the shared key block in the script). */
+.mgmt-key-bar { border: 1px solid var(--border); border-left: 3px solid var(--warn, var(--warning, #f59e0b)); border-radius: 8px; background: var(--bg-card); padding: 10px 12px; margin: 0 0 12px; }
+.mgmt-key-bar[hidden] { display: none; }
+.mgmt-key-label { display: block; font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+.mgmt-key-row { display: flex; gap: 8px; align-items: center; }
+.mgmt-key-input { flex: 1; min-width: 0; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 6px 10px; font: inherit; font-size: 13px; outline: none; }
+.mgmt-key-input:focus { border-color: var(--accent); }
+.mgmt-key-btn { background: var(--accent); color: #fff; border: 1px solid var(--accent); border-radius: 4px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.mgmt-key-note { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
+.mgmt-key-bar[data-reason="rejected"] .mgmt-key-note,
+.mgmt-key-bar[data-reason="blocked"] .mgmt-key-note,
+.mgmt-key-bar[data-reason="invalid"] .mgmt-key-note { color: var(--bad, var(--danger, #ef4444)); }
+@media (max-width: 640px) {
+  .mgmt-key-row { flex-direction: column; align-items: stretch; }
+  .mgmt-key-input { font-size: 16px; min-height: 38px; }
+  .mgmt-key-btn { min-height: 38px; }
+}
 </style>
 </head>
 <body>
@@ -393,6 +411,17 @@ body {
       <div class="brand-sub">Kiểm tra & chẩn đoán tính năng nâng cao của mô hình AI</div>
     </div>
   </header>
+
+  <!-- Shown only when no usable Management Key was found or CPA rejected the
+       one in use. Replaces the old blocking key dialog. -->
+  <form id="mgmt-key-bar" class="mgmt-key-bar" hidden onsubmit="return submitManagementKey(event)">
+    <label class="mgmt-key-label" for="mgmt-key-input">Management Key của CPA</label>
+    <div class="mgmt-key-row">
+      <input id="mgmt-key-input" class="mgmt-key-input" type="password" autocomplete="off" spellcheck="false" placeholder="Dán Management Key vào đây">
+      <button type="submit" class="mgmt-key-btn">Dùng key này</button>
+    </div>
+    <div id="mgmt-key-note" class="mgmt-key-note" role="status" aria-live="polite"></div>
+  </form>
 
   <!-- Navigation Tabs -->
   <div class="nav-tabs">
@@ -563,103 +592,371 @@ function toggleKeyVisibility() {
   }
 }
 
-// Auth key resolution for Management API (Exact match with dashboard2.html)
-var SALT = "cli-proxy-api-webui::secure-storage";
-var PREFIX = "enc::v1::";
+// ---- cpa management key: shared block (begin) -----------------------------
+// Keep this block byte-identical in dashboard.html and dashboard2.html:
+// test_dashboard_auth.js fails as soon as the two copies drift apart.
+//
+// Where the key comes from, first usable one wins:
+//   1. a key typed into the key bar on this page
+//   2. ?key= in the page URL (or key= inside the #hash)
+//   3. the CPA management panel (CPAMC) session, localStorage "cli-proxy-auth"
+//   4. a key typed earlier on this page and accepted by CPA ("cpa_mgmt_key")
+// CPAMC obfuscates what it stores; both formats are still found in the wild:
+//   enc::v2:: + base64(XOR(utf8(json), utf8(SALT + "|" + host)))               current
+//   enc::v1:: + base64(XOR(utf8(json), utf8(SALT + "|" + host + "|" + UA)))    older
+// The decoder mirrors model-router 0.5.7: a value that does not decode to JSON
+// yields NO key, so an undecodable blob is never sent as a bearer token.
+//
+// Every failed key counts toward CPA's management ban (5 in a row => 30 min
+// for the IP), and so does a request that carries no key at all. Hence: no key
+// means no request, only one unverified key is in flight at a time, and a
+// rejected key is remembered (as a fingerprint, 5 min, this tab) and skipped.
+var CPA_MGMT_BASE = "/v0/management/plugins/usage-statistics";
+var CPA_STORAGE_PREFIX = "enc::v2::";
+var CPA_LEGACY_STORAGE_PREFIX = "enc::v1::";
+var CPA_STORAGE_SALT = "cli-proxy-api-webui::secure-storage";
+var MANUAL_KEY_STORAGE = "cpa_mgmt_key";
+var REJECTED_KEYS_STORAGE = "usage-statistics-rejected-keys";
+var REJECTED_KEY_TTL_MS = 5 * 60 * 1000;
+var BLOCKED_RETRY_MS = 60 * 1000;
+var MGMT_KEY_NOTES = {
+  missing: "Không tự đọc được Management Key từ trang quản lý CPA. Nhập key một lần, trang này sẽ nhớ cho lần sau.",
+  rejected: "CPA không nhận key đang lưu. Nhập Management Key hiện tại.",
+  checking: "Đang kiểm tra key…",
+  empty: "Chưa nhập key.",
+  invalid: "Key không hợp lệ: chỉ một dòng, không có ký tự lạ."
+};
+var mgmtAuth = {
+  key: "", source: "", verified: false, verifying: null, typedKey: "",
+  blockedUntil: 0, blockedMessage: "", rejectedSeen: false
+};
 
-function decodeObfuscated(val) {
-  if (!val || typeof val !== "string") return "";
-  if (val.slice(0, PREFIX.length) === PREFIX) {
-    try {
-      var b64 = val.slice(PREFIX.length);
-      var raw = (typeof atob === "function") ? atob(b64) : Buffer.from(b64, "base64").toString("binary");
-      var host = (window && window.location && window.location.host) || "";
-      var ua = (navigator && navigator.userAgent) || "";
-      var salt = SALT + "|" + host + "|" + ua;
-      var out = "";
-      for (var i = 0; i < raw.length; i++) {
-        out += String.fromCharCode(raw.charCodeAt(i) ^ salt.charCodeAt(i % salt.length));
-      }
-      return out;
-    } catch (e) { return ""; }
-  }
-  return val;
-}
-
-function extractKeyFromJson(str) {
-  if (!str) return "";
-  try {
-    var obj = JSON.parse(str);
-    if (obj && typeof obj === "object") {
-      if (obj.state && obj.state.managementKey) return String(obj.state.managementKey).trim();
-      if (obj.managementKey) return String(obj.managementKey).trim();
-    }
-  } catch (e) {
-    return String(str).trim();
+function firstText() {
+  for (var i = 0; i < arguments.length; i++) {
+    var value = arguments[i];
+    if (typeof value === "string" && value.trim()) return value.trim();
   }
   return "";
+}
+
+function safeStorage(name) {
+  try { return window[name] || null; } catch (e) { return null; }
+}
+
+function readStorageText(storage, name) {
+  try { return String((storage && storage.getItem(name)) || "").trim(); } catch (e) { return ""; }
+}
+
+function writeStorageText(storage, name, value) {
+  try { if (storage) storage.setItem(name, value); } catch (e) { /* storage full or blocked */ }
+}
+
+function removeStorageEntry(storage, name) {
+  try { if (storage) storage.removeItem(name); } catch (e) { /* storage blocked */ }
+}
+
+// Returns the decoded text, the value itself when it is not obfuscated, or ""
+// when it is obfuscated but cannot be decoded (unknown version, wrong host).
+function decodeCPAStorage(value) {
+  if (!value || value.indexOf("enc::") !== 0) return value;
+  var legacy = value.indexOf(CPA_LEGACY_STORAGE_PREFIX) === 0;
+  if (!legacy && value.indexOf(CPA_STORAGE_PREFIX) !== 0) return "";
+  try {
+    var prefix = legacy ? CPA_LEGACY_STORAGE_PREFIX : CPA_STORAGE_PREFIX;
+    var raw = atob(value.slice(prefix.length));
+    var data = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) data[i] = raw.charCodeAt(i);
+    var salt = new TextEncoder().encode(CPA_STORAGE_SALT + "|" + window.location.host +
+      (legacy ? "|" + navigator.userAgent : ""));
+    var out = new Uint8Array(data.length);
+    for (var j = 0; j < data.length; j++) out[j] = data[j] ^ salt[j % salt.length];
+    return new TextDecoder("utf-8", { fatal: true }).decode(out);
+  } catch (e) {
+    return "";
+  }
+}
+
+function readCPAStorageValue(storage, name) {
+  var raw = readStorageText(storage, name);
+  if (!raw) return null;
+  var decoded = decodeCPAStorage(raw);
+  if (raw.indexOf("enc::") === 0) {
+    try { return JSON.parse(decoded); } catch (e) { return null; }
+  }
+  try { return JSON.parse(decoded); } catch (e2) { return decoded; }
+}
+
+function cpaAuthStoreKey(storage) {
+  var auth = readCPAStorageValue(storage, "cli-proxy-auth");
+  if (!auth || typeof auth !== "object") return "";
+  return firstText(auth.state && auth.state.managementKey, auth.managementKey);
+}
+
+// The current panel only keeps a v2 "cli-proxy-auth" and deletes anything
+// else on load, so a v2 entry is the whole answer when it exists.
+function readManagementKeyEntry(storage) {
+  var raw = readStorageText(storage, "managementKey");
+  if (!raw) return "";
+  var decoded = raw.indexOf("enc::") === 0 ? decodeCPAStorage(raw) : raw;
+  try {
+    var obj = JSON.parse(decoded);
+    if (obj && typeof obj === "object") {
+      return firstText(obj.state && obj.state.managementKey, obj.managementKey);
+    }
+  } catch (e) { /* not JSON: the decoded text is the key */ }
+  return decoded;
 }
 
 function cpaStoredManagementKey() {
-  var storages = [];
-  if (typeof localStorage !== "undefined") storages.push(localStorage);
-  if (typeof sessionStorage !== "undefined") storages.push(sessionStorage);
-  var knownKeys = ["cli-proxy-auth", "managementKey", "cpa_mgmt_key"];
-  for (var s = 0; s < storages.length; s++) {
-    var st = storages[s];
-    for (var k = 0; k < knownKeys.length; k++) {
-      var raw = st.getItem(knownKeys[k]);
-      if (raw) {
-        var dec = decodeObfuscated(raw);
-        var res = extractKeyFromJson(dec);
-        if (res) return res;
-      }
+  var session = safeStorage("sessionStorage");
+  var local = safeStorage("localStorage");
+  var stores = [local, session];
+  for (var i = 0; i < stores.length; i++) {
+    if (readStorageText(stores[i], "cli-proxy-auth").indexOf(CPA_STORAGE_PREFIX) === 0) {
+      return cpaAuthStoreKey(stores[i]);
     }
   }
+  return firstText(
+    cpaAuthStoreKey(session),
+    cpaAuthStoreKey(local),
+    readManagementKeyEntry(session),
+    readManagementKeyEntry(local)
+  );
+}
+
+function urlManagementKey() {
+  try {
+    var params = new URLSearchParams(window.location.search || "");
+    var fromQuery = firstText(params.get("key"), params.get("k"));
+    if (fromQuery) return fromQuery;
+    var hm = String(window.location.hash || "").match(/[?&]key=([^&]+)/);
+    if (hm) return firstText(decodeURIComponent(hm[1]));
+  } catch (e) { /* malformed URL */ }
   return "";
 }
 
-function resolveManagementKey() {
-  var params = (typeof window !== "undefined" && window.location && window.location.search) ? new URLSearchParams(window.location.search) : null;
-  var k = params ? (params.get("key") || params.get("k")) : null;
-  if (k) return k;
-  if (typeof window !== "undefined" && window.location && window.location.hash) {
-    var hm = window.location.hash.match(/[?&]key=([^&]+)/);
-    if (hm) return decodeURIComponent(hm[1]);
+// A management key is one line of printable ASCII. Anything else (a storage
+// blob, a multi-line paste) is not a key and must never reach the wire.
+function isUsableKey(key) {
+  return typeof key === "string" && key.length > 0 && key.length <= 1024 &&
+    key.indexOf("enc::") !== 0 && /^[\x21-\x7e](?:[\x20-\x7e]*[\x21-\x7e])?$/.test(key);
+}
+
+// Recognises a key again without writing the key itself into storage.
+function keyFingerprint(key) {
+  var h1 = 0x811c9dc5, h2 = 0x050c5d1f;
+  for (var i = 0; i < key.length; i++) {
+    var c = key.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 0x01000193) >>> 0;
+    h2 = Math.imul(h2 ^ c, 0x01000193) >>> 0;
   }
-  var stored = cpaStoredManagementKey();
-  if (stored) return stored;
-  return "";
+  return ("0000000" + h1.toString(16)).slice(-8) + ("0000000" + h2.toString(16)).slice(-8);
 }
 
-var currentMgmtKey = resolveManagementKey();
+function rejectedKeyMap() {
+  var stored = {};
+  try { stored = JSON.parse(readStorageText(safeStorage("sessionStorage"), REJECTED_KEYS_STORAGE) || "{}") || {}; } catch (e) { stored = {}; }
+  var live = {};
+  var now = Date.now();
+  for (var fp in stored) {
+    if (Object.prototype.hasOwnProperty.call(stored, fp) && typeof stored[fp] === "number" &&
+        now - stored[fp] < REJECTED_KEY_TTL_MS) {
+      live[fp] = stored[fp];
+    }
+  }
+  return live;
+}
 
-function api(path, options) {
+function isRejectedKey(key) {
+  return Object.prototype.hasOwnProperty.call(rejectedKeyMap(), keyFingerprint(key));
+}
+
+function setKeyRejected(key, rejected) {
+  var map = rejectedKeyMap();
+  var fp = keyFingerprint(key);
+  if (rejected) map[fp] = Date.now(); else delete map[fp];
+  writeStorageText(safeStorage("sessionStorage"), REJECTED_KEYS_STORAGE, JSON.stringify(map));
+}
+
+function managementKeyCandidates() {
+  var list = [];
+  var seen = Object.create(null);
+  function add(value, source) {
+    var key = firstText(value);
+    if (!isUsableKey(key) || seen[key] || isRejectedKey(key)) return;
+    seen[key] = true;
+    list.push({ key: key, source: source });
+  }
+  add(mgmtAuth.typedKey, "typed");
+  add(urlManagementKey(), "url");
+  add(cpaStoredManagementKey(), "cpamc");
+  add(readStorageText(safeStorage("localStorage"), MANUAL_KEY_STORAGE), "saved");
+  return list;
+}
+
+function showManagementKeyBar(reason) {
+  if (typeof document === "undefined" || !document.getElementById) return;
+  var bar = document.getElementById("mgmt-key-bar");
+  if (!bar) return;
+  var note = document.getElementById("mgmt-key-note");
+  if (note) note.textContent = reason === "blocked" ? mgmtAuth.blockedMessage : (MGMT_KEY_NOTES[reason] || "");
+  bar.setAttribute("data-reason", reason);
+  bar.hidden = false;
+}
+
+function hideManagementKeyBar() {
+  if (typeof document === "undefined" || !document.getElementById) return;
+  var bar = document.getElementById("mgmt-key-bar");
+  if (bar) bar.hidden = true;
+}
+
+function noteRejectedKey(key, source) {
+  setKeyRejected(key, true);
+  mgmtAuth.rejectedSeen = true;
+  if (mgmtAuth.key === key) {
+    mgmtAuth.key = "";
+    mgmtAuth.source = "";
+    mgmtAuth.verified = false;
+  }
+  if (mgmtAuth.typedKey === key) mgmtAuth.typedKey = "";
+  var local = safeStorage("localStorage");
+  if (source === "saved" || readStorageText(local, MANUAL_KEY_STORAGE) === key) {
+    removeStorageEntry(local, MANUAL_KEY_STORAGE);
+  }
+}
+
+function noteAcceptedKey(key, source) {
+  if (mgmtAuth.verified && mgmtAuth.key === key) return;
+  mgmtAuth.key = key;
+  mgmtAuth.source = source;
+  mgmtAuth.verified = true;
+  mgmtAuth.blockedUntil = 0;
+  mgmtAuth.blockedMessage = "";
+  if (source === "typed") writeStorageText(safeStorage("localStorage"), MANUAL_KEY_STORAGE, key);
+  hideManagementKeyBar();
+}
+
+// 403 is CPA's IP ban (or remote management switched off): the key was not
+// even checked, so it is neither accepted nor rejected. Requests pause for a
+// minute instead of hammering a door that is known to be shut.
+function noteBlocked(message) {
+  var text = typeof message === "string" ? message.trim() : "";
+  var wait = text.match(/try again in\s+([0-9hms.]+)/i);
+  mgmtAuth.blockedUntil = Date.now() + BLOCKED_RETRY_MS;
+  mgmtAuth.blockedMessage = wait
+    ? "CPA đang tạm khoá API quản lý cho IP này vì nhập sai key nhiều lần. Thử lại sau " + wait[1] + "."
+    : "CPA từ chối truy cập API quản lý (HTTP 403)" + (text ? ": " + text.slice(0, 200) : "") + ".";
+  showManagementKeyBar("blocked");
+}
+
+function sendWithKey(path, options, key, source, release) {
+  var headers = {};
+  var given = options.headers || {};
+  for (var name in given) {
+    if (Object.prototype.hasOwnProperty.call(given, name)) headers[name] = given[name];
+  }
+  if (!headers["Content-Type"]) headers["Content-Type"] = "application/json";
+  headers["Authorization"] = "Bearer " + key;
+  var init = { method: options.method || "GET", headers: headers };
+  if (options.body !== undefined && options.body !== null) init.body = options.body;
+  return fetch(CPA_MGMT_BASE + path, init).then(function (res) {
+    if (res.status === 401) {
+      noteRejectedKey(key, source);
+      if (release) release();
+      return managementFetch(path, options);
+    }
+    if (res.status === 403) {
+      return res.clone().json().catch(function () { return {}; }).then(function (body) {
+        noteBlocked(body && body.error);
+        if (release) release();
+        return res;
+      });
+    }
+    noteAcceptedKey(key, source);
+    if (release) release();
+    return res;
+  }, function (err) {
+    if (release) release();
+    throw err;
+  });
+}
+
+// fetch() for this plugin's management API with the key handled. The first
+// request that carries an unverified key holds a gate; the rest wait for its
+// verdict, so a wrong key costs one failed attempt, not one per panel.
+function managementFetch(path, options) {
   options = options || {};
-  var headers = options.headers || {};
-  headers["Content-Type"] = "application/json";
-  if (currentMgmtKey) headers["Authorization"] = "Bearer " + currentMgmtKey;
-  
-  var fetchOpts = {
-    method: options.method || "GET",
-    headers: headers
-  };
-  if (options.body) fetchOpts.body = options.body;
+  if (mgmtAuth.blockedUntil > Date.now()) {
+    return Promise.reject(new Error(mgmtAuth.blockedMessage));
+  }
+  if (mgmtAuth.verified && mgmtAuth.key) {
+    return sendWithKey(path, options, mgmtAuth.key, mgmtAuth.source, null);
+  }
+  if (mgmtAuth.verifying) {
+    return mgmtAuth.verifying.then(function () { return managementFetch(path, options); });
+  }
+  var next = managementKeyCandidates()[0];
+  if (!next) {
+    showManagementKeyBar(mgmtAuth.rejectedSeen ? "rejected" : "missing");
+    return Promise.reject(new Error("Chưa có Management Key của CPA"));
+  }
+  var gate, release;
+  gate = new Promise(function (resolve) {
+    release = function () {
+      if (mgmtAuth.verifying === gate) mgmtAuth.verifying = null;
+      resolve();
+    };
+  });
+  mgmtAuth.verifying = gate;
+  return sendWithKey(path, options, next.key, next.source, release);
+}
 
-  return fetch("/v0/management/plugins/usage-statistics" + path, fetchOpts)
-    .then(function(res) {
-      if (res.status === 401) {
-        var manual = prompt("Vui lòng nhập Management Key của CPA để xem dữ liệu:");
-        if (manual) {
-          currentMgmtKey = manual.trim();
-          if (typeof localStorage !== "undefined") localStorage.setItem("cpa_mgmt_key", currentMgmtKey);
-          return api(path, options);
-        }
-        throw new Error("HTTP 401 Unauthorized");
-      }
-      if (!res.ok) throw new Error("HTTP " + res.status);
-      return res.json();
-    });
+function managementJSON(path, options) {
+  return managementFetch(path, options).then(function (res) {
+    if (!res.ok) {
+      return res.text().then(function (text) {
+        var detail = "";
+        try {
+          var body = JSON.parse(text);
+          detail = (body && (body.error || body.message)) || "";
+        } catch (e) { detail = ""; }
+        throw new Error("HTTP " + res.status + (typeof detail === "string" && detail ? ": " + detail.slice(0, 200) : ""));
+      });
+    }
+    return res.json();
+  });
+}
+
+// Key bar submit. The typed key goes to the front of the queue and the page
+// reloads its data; it is saved for next time only once CPA has accepted it.
+function submitManagementKey(event) {
+  if (event && event.preventDefault) event.preventDefault();
+  var input = typeof document !== "undefined" && document.getElementById ? document.getElementById("mgmt-key-input") : null;
+  var key = firstText(input && input.value);
+  if (!key) { showManagementKeyBar("empty"); return false; }
+  if (!isUsableKey(key)) { showManagementKeyBar("invalid"); return false; }
+  setKeyRejected(key, false);
+  mgmtAuth.typedKey = key;
+  mgmtAuth.key = "";
+  mgmtAuth.source = "";
+  mgmtAuth.verified = false;
+  mgmtAuth.blockedUntil = 0;
+  mgmtAuth.blockedMessage = "";
+  if (input) input.value = "";
+  showManagementKeyBar("checking");
+  if (typeof onManagementKeyReady === "function") onManagementKeyReady();
+  return false;
+}
+// ---- cpa management key: shared block (end) -------------------------------
+
+// ---- api client ------------------------------------------------------------
+function api(path, options) {
+  return managementJSON(path, options);
+}
+
+// Called by the key bar once a key has been typed in.
+function onManagementKeyReady() {
+  loadCPAProviders();
 }
 
 // Load CPA providers on startup

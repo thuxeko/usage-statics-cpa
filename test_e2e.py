@@ -81,7 +81,8 @@ def main():
     assert any("usage/requests" in p for p in paths), "requests route missing"
     res = mreg["resources"]
     print("resources:", res)
-    assert res and res[0]["Menu"] == "Usage Statistics", res
+    menus = [r["Menu"] for r in res]
+    assert "Tools" in menus and "Analytics Dashboard" in menus, res
     print("PASS management.register: routes + resource menu present")
 
     # 3. push usage records: direct calls, alias (combo) calls, failures
@@ -142,13 +143,13 @@ def main():
     assert page["total"] == 2, page["total"]  # matches alias OR model
     print("PASS requests: pagination + failed filter + alias filter")
 
-    # 6. dashboard resource page (full public path like CPA dispatches)
+    # 6. dashboard resource page (Tools Hub; CPA dispatches the full public path)
     code, body = mgmt("GET", "/v0/resource/plugins/usage-statistics/dashboard", {})
     assert code == 200, code
     html = body.decode()
-    assert ("Usage Statistics" in html or "Analytics Dashboard" in html) and "usage/summary" in html, "dashboard html unexpected"
+    assert "CPA Tools Hub" in html and "/providers" in html, "dashboard html unexpected"
     assert len(html) > 5000, len(html)
-    print("PASS dashboard: HTML page served, %d bytes, title + API calls present" % len(html))
+    print("PASS dashboard: HTML page served, %d bytes, Tools Hub present" % len(html))
 
     # 6b. dashboard2 resource page (v2 clean, icon-free)
     code, body2 = mgmt("GET", "/v0/resource/plugins/usage-statistics/dashboard2", {})
