@@ -113,5 +113,19 @@ check("decode separate sessionStorage managementKey entry", r.key, "SESSION-KEY-
 r = runAuth({ "some-unrelated-key": obfuscate("NOPE", 2) }, { other: "x" });
 check("no session -> no candidates (never brute-forces storage)", r.cands.length, 0);
 
+// 8. The key-handling block is duplicated in dashboard.html and dashboard2.html
+// (each page is a self-contained resource). Fail as soon as the copies drift.
+const SHARED_BEGIN = "// ---- cpa management key: shared block (begin)";
+const SHARED_END = "// ---- cpa management key: shared block (end)";
+function sharedBlock(page) {
+  const text = fs.readFileSync(path.join(__dirname, page), "utf8");
+  const a = text.indexOf(SHARED_BEGIN);
+  const b = text.indexOf(SHARED_END);
+  if (a < 0 || b < a) throw new Error(`shared key block markers not found in ${page}`);
+  return text.slice(a, b + SHARED_END.length);
+}
+check("dashboard.html and dashboard2.html carry the same shared key block",
+  sharedBlock("dashboard.html") === sharedBlock("dashboard2.html"), true);
+
 console.log(failures === 0 ? "\nDASHBOARD AUTH TESTS PASSED" : `\n${failures} TEST(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);
